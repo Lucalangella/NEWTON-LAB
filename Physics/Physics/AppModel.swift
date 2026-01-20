@@ -36,25 +36,31 @@ class AppModel {
     // --- System States ---
     var immersiveSpaceState: ImmersiveSpaceState = .closed
     var resetSignal = false
-    // REMOVED: var impulseSignal = false (No longer needed)
     
     // --- Live Data ---
     var currentSpeed: Float = 0.0
     
     // --- Gesture Debugging ---
     var isDragging: Bool = false
-    var throwStrength: Float = 8.0  // Editable multiplier
-    var lastThrowVector: String = "0.0, 0.0, 0.0" // Debug info
+    
+    // CHANGED: Split into a Toggle and a Strength slider
+    var isThrowingEnabled: Bool = false // Default OFF: Just drop
+    var throwStrength: Float = 1.0
+    
+    var lastThrowVector: String = "0.0, 0.0, 0.0"
     
     // --- Physics Properties ---
     var selectedMode: PhysicsModeOption = .dynamic
     var mass: Float = 1.0
     
+    // Gravity Control
+    var gravity: Float = -9.8
+    
     var staticFriction: Float = 0.5
     var dynamicFriction: Float = 0.5
     var restitution: Float = 0.6
     
-    var linearDamping: Float = 0.0
+    var linearDamping: Float = 0.1
     
     func triggerReset() { resetSignal.toggle() }
 }
