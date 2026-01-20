@@ -15,6 +15,8 @@ struct PhysicsControlView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                
+                
 
                 Section("Environment") {
                     VStack {
@@ -94,9 +96,23 @@ struct PhysicsControlView: View {
                     }
                     
                     VStack {
-                        HStack { Text("Friction"); Spacer(); Text(String(format: "%.2f", appModel.dynamicFriction)) }
-                        Slider(value: Bindable(appModel).dynamicFriction, in: 0.0...1.0)
-                    }
+                                        HStack {
+                                            Text("Static Friction")
+                                            Spacer()
+                                            Text(String(format: "%.2f", appModel.staticFriction))
+                                        }
+                                        Slider(value: Bindable(appModel).staticFriction, in: 0.0...1.0)
+                                    }
+                                    
+                         
+                                    VStack {
+                                        HStack {
+                                            Text("Dynamic Friction")
+                                            Spacer()
+                                            Text(String(format: "%.2f", appModel.dynamicFriction))
+                                        }
+                                        Slider(value: Bindable(appModel).dynamicFriction, in: 0.0...1.0)
+                                    }
                     
                     VStack {
                         HStack { Text("Air Resistance"); Spacer(); Text(String(format: "%.2f", appModel.linearDamping)) }
