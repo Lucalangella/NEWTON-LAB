@@ -4,10 +4,10 @@ import RealityKit
 struct ImmersiveView: View {
     @Environment(AppModel.self) var appModel
     @State private var boxEntity: ModelEntity?
-    @State private var speedText: String = "0.0 m/s" // Stores current speed
     
     var body: some View {
-        RealityView { content, attachments in
+        // ERROR FIX 1: Removed ", attachments" here
+        RealityView { content in
             // --- 1. SETUP SCENE ---
             
             // Floor
@@ -45,54 +45,36 @@ struct ImmersiveView: View {
             content.add(box)
             self.boxEntity = box
             
-            // --- 2. ADD ATTACHMENT ---
-            // Fetch the SwiftUI view we defined below (id: "speedLabel")
-            if let attachmentEntity = attachments.entity(for: "speedLabel") {
-                // Position it 25cm above the cube
-                attachmentEntity.position = [0, 0.25, 0]
-                // Make it a child of the box so it moves with it
-                box.addChild(attachmentEntity)
-            }
-            
-            // --- 3. SUBSCRIBE TO UPDATES (To calculate speed) ---
-            // This runs every single frame (90 times a second)
+            // --- 2. SUBSCRIBE TO UPDATES ---
             _ = content.subscribe(to: SceneEvents.Update.self) { event in
                 guard let box = boxEntity,
                       let motion = box.components[PhysicsMotionComponent.self] else { return }
                 
-                // Calculate speed (magnitude of velocity vector)
+                // ERROR FIX 2: Simplified math using length() to avoid compiler timeouts
                 let velocity = motion.linearVelocity
-                let speed = sqrt(velocity.x*velocity.x + velocity.y*velocity.y + velocity.z*velocity.z)
+                let speed = length(velocity)
                 
-                // Update the state variable
-                self.speedText = String(format: "%.1f m/s", speed)
+                // Update the AppModel
+                appModel.currentSpeed = speed
             }
             
-        } update: { content, attachments in
-            // (Optional) Handle updates here if needed
-        } attachments: {
-            // --- 4. DEFINE THE SWIFTUI VIEW ---
-            Attachment(id: "speedLabel") {
-                Text(speedText)
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(.black.opacity(0.7))
-                    .cornerRadius(12)
-                    // Make it always face the user (Billboard effect) is automatic for attachments usually,
-                    // but keeping it simple here.
-            }
+        } update: { content in
+            // ERROR FIX 3: Removed ", attachments" here as well
+            // Optional updates handle here
         }
+        
         // --- EVENT HANDLERS ---
         .onChange(of: appModel.resetSignal) {
             guard let box = boxEntity else { return }
             box.position = [0, 1.5, -2.0]
+            // Stop movement on reset
             box.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
         }
         .onChange(of: appModel.impulseSignal) {
             guard let box = boxEntity else { return }
             if appModel.selectedMode == .dynamic {
                 let kickStrength: Float = 10.0 * appModel.mass
+                // Kick slightly up (y: 2.0) and forward into scene (z: -kickStrength)
                 box.applyLinearImpulse([0, 2.0, -kickStrength], relativeTo: nil)
             }
         }
@@ -106,11 +88,13 @@ struct ImmersiveView: View {
     
     func updatePhysicsProperties() {
         guard let box = boxEntity else { return }
+        
         let newMaterial = PhysicsMaterialResource.generate(
             staticFriction: appModel.staticFriction,
             dynamicFriction: appModel.dynamicFriction,
             restitution: appModel.restitution
         )
+        
         var bodyComponent = box.components[PhysicsBodyComponent.self] ?? PhysicsBodyComponent()
         bodyComponent.massProperties.mass = appModel.mass
         bodyComponent.material = newMaterial
@@ -118,8 +102,17 @@ struct ImmersiveView: View {
         bodyComponent.linearDamping = appModel.linearDamping
         box.components.set(bodyComponent)
         
-        if appModel.selectedMode != .dynamic {
+        // Handle logic for specific modes
+        switch appModel.selectedMode {
+        case .dynamic:
+            break
+        case .staticMode:
+            // Freeze instantly
             box.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
+        case .kinematic:
+            // Stop falling, but spin to show it's active
+            let spinSpeed: Float = 1.0
+            box.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: [0, spinSpeed, 0]))
         }
     }
 }

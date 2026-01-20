@@ -13,13 +13,25 @@ struct PhysicsControlView: View {
     var body: some View {
         NavigationStack {
             List {
-                // --- Section 1: Actions ---
+                // --- Section 1: Live Data (Simple Text) ---
+                Section("Telemetry") {
+                    HStack {
+                        Label("Current Speed", systemImage: "speedometer")
+                        Spacer()
+                        // Monospaced font keeps the numbers from "jittering"
+                        Text("\(appModel.currentSpeed, specifier: "%.2f") m/s")
+                            .font(.monospacedDigit(.body)())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // --- Section 2: Actions ---
                 Section("Actions") {
                     Button("Respawn Box") { appModel.triggerReset() }
                     Button("Kick Box (Apply Impulse)") { appModel.triggerImpulse() }
                 }
                 
-                // --- Section 2: Behavior ---
+                // --- Section 3: Behavior ---
                 Section("Body Behavior") {
                     Picker("Mode", selection: Bindable(appModel).selectedMode) {
                         ForEach(PhysicsModeOption.allCases) { mode in
@@ -34,7 +46,7 @@ struct PhysicsControlView: View {
                     }
                 }
                 
-                // --- Section 3: Material ---
+                // --- Section 4: Material ---
                 Section("Material (Surface)") {
                     VStack {
                         HStack { Text("Bounciness"); Spacer(); Text(String(format: "%.2f", appModel.restitution)) }
@@ -52,7 +64,7 @@ struct PhysicsControlView: View {
                     }
                 }
                 
-                // --- Section 4: Damping ---
+                // --- Section 5: Damping ---
                 Section("Damping (Resistance)") {
                     VStack {
                         HStack { Text("Air Resistance"); Spacer(); Text(String(format: "%.2f", appModel.linearDamping)) }
@@ -62,7 +74,7 @@ struct PhysicsControlView: View {
             }
             .navigationTitle("Physics Lab")
         }
-        .frame(width: 400, height: 1100) // Fixed size for the window
+        .frame(width: 400, height: 1100)
     }
 }
 

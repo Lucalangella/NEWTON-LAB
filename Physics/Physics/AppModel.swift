@@ -42,6 +42,9 @@ class AppModel {
     var resetSignal = false
     var impulseSignal = false
     
+    // --- Live Data ---
+        var currentSpeed: Float = 0.0 // <--- ADD THIS
+    
     // --- Physics Properties ---
     // 1. Body
     var selectedMode: PhysicsModeOption = .dynamic
