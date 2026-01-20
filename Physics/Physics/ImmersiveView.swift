@@ -46,7 +46,7 @@ struct ImmersiveView: View {
                 materials: [SimpleMaterial(color: .gray, isMetallic: false)]
             )
             // Position it slightly to the side or center, raised slightly so it doesn't clip the floor
-            ramp.position = [1.0, 0.5, -2.0]
+            ramp.position = [0.0, 0.5, -2.0]
 
             // Physics for Ramp (Static, so it doesn't fall)
             ramp.generateCollisionShapes(recursive: false)

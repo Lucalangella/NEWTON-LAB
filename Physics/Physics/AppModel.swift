@@ -68,7 +68,7 @@ class AppModel {
     
     // NEW: Ramp Control
         var showRamp: Bool = false
-        var rampAngle: Float = 15.0 // Degrees
+        var rampAngle: Float = 0.0 // Degrees
     
     
 }
