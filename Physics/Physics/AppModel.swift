@@ -15,6 +15,15 @@ enum ImmersiveSpaceState {
     case open
 }
 
+// NEW: Shape Options
+enum ShapeOption: String, CaseIterable, Identifiable {
+    case box = "Cube"
+    case sphere = "Sphere"
+    case cylinder = "Cylinder"
+    
+    var id: String { self.rawValue }
+}
+
 enum PhysicsModeOption: String, CaseIterable, Identifiable {
     case dynamic = "Dynamic"
     case staticMode = "Static"
@@ -40,26 +49,19 @@ class AppModel {
     // --- Live Data ---
     var currentSpeed: Float = 0.0
     
-    // --- Gesture Debugging ---
+    // --- Interaction ---
     var isDragging: Bool = false
-    
-    // CHANGED: Split into a Toggle and a Strength slider
-    var isThrowingEnabled: Bool = false // Default OFF: Just drop
-    var throwStrength: Float = 1.0
-    
-    var lastThrowVector: String = "0.0, 0.0, 0.0"
+    var showPath: Bool = false
     
     // --- Physics Properties ---
+    var selectedShape: ShapeOption = .box // Default
     var selectedMode: PhysicsModeOption = .dynamic
+    
     var mass: Float = 1.0
-    
-    // Gravity Control
     var gravity: Float = -9.8
-    
     var staticFriction: Float = 0.5
     var dynamicFriction: Float = 0.5
     var restitution: Float = 0.6
-    
     var linearDamping: Float = 0.1
     
     func triggerReset() { resetSignal.toggle() }

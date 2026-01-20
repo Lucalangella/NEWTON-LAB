@@ -6,7 +6,6 @@ struct PhysicsControlView: View {
     var body: some View {
         NavigationStack {
             List {
-                // --- Section 1: Telemetry ---
                 Section("Telemetry") {
                     HStack {
                         Label("Current Speed", systemImage: "speedometer")
@@ -17,7 +16,6 @@ struct PhysicsControlView: View {
                     }
                 }
 
-                // --- Section 2: Environment ---
                 Section("Environment") {
                     VStack {
                         HStack {
@@ -30,9 +28,10 @@ struct PhysicsControlView: View {
                     }
                 }
 
-                // --- Section 3: Gesture ---
                 Section("Interaction") {
-                    Button("Respawn Box") { appModel.triggerReset() }
+                    Button("Respawn Object") { appModel.triggerReset() }
+                    
+                    Toggle("Show Motion Path (Plot)", isOn: Bindable(appModel).showPath)
                     
                     HStack {
                         Text("Status")
@@ -45,36 +44,20 @@ struct PhysicsControlView: View {
                             .cornerRadius(8)
                     }
                     
-                    // CHANGED: Toggle for throwing
-                    Toggle("Enable Throwing", isOn: Bindable(appModel).isThrowingEnabled)
-                    
-                    if appModel.isThrowingEnabled {
-                        VStack {
-                            HStack {
-                                Text("Throw Power")
-                                Spacer()
-                                Text(String(format: "x%.1f", appModel.throwStrength))
-                                    .foregroundStyle(.orange)
-                            }
-                            Slider(value: Bindable(appModel).throwStrength, in: 0.5...5.0)
-                        }
-                        
-                        VStack(alignment: .leading) {
-                            Text("Last Throw Vector")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(appModel.lastThrowVector)
-                                .font(.system(.caption, design: .monospaced))
-                        }
-                    } else {
-                        Text("Object will drop vertically on release.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("Object will drop vertically on release.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 
-                // --- Section 4: Body Properties ---
                 Section("Body Properties") {
+                    // NEW: Shape Picker
+                    Picker("Shape", selection: Bindable(appModel).selectedShape) {
+                        ForEach(ShapeOption.allCases) { shape in
+                            Text(shape.rawValue).tag(shape)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    
                     Picker("Mode", selection: Bindable(appModel).selectedMode) {
                         ForEach(PhysicsModeOption.allCases) { mode in
                             Text(mode.rawValue).tag(mode)

@@ -3,8 +3,14 @@ import RealityKit
 
 struct ImmersiveView: View {
     @Environment(AppModel.self) var appModel
-    @State private var boxEntity: ModelEntity?
+    
+    // Scene References
+    @State private var objectEntity: ModelEntity? // Renamed from boxEntity for clarity
     @State private var rootEntity: Entity?
+    @State private var traceRoot: Entity?
+    
+    // Logic State
+    @State private var lastMarkerPosition: SIMD3<Float>? = nil
     
     var body: some View {
         RealityView { content in
@@ -12,13 +18,17 @@ struct ImmersiveView: View {
             let root = Entity()
             root.name = "Root"
             
-            // Add a PhysicsSimulationComponent to the root to control gravity
             var physSim = PhysicsSimulationComponent()
             physSim.gravity = [0, -9.8, 0]
             root.components.set(physSim)
             
             content.add(root)
             self.rootEntity = root
+            
+            let traces = Entity()
+            traces.name = "TraceRoot"
+            root.addChild(traces)
+            self.traceRoot = traces
             
             let floor = ModelEntity(
                 mesh: .generatePlane(width: 4.0, depth: 4.0),
@@ -27,18 +37,16 @@ struct ImmersiveView: View {
             floor.position = [0, 0, -2.0]
             floor.generateCollisionShapes(recursive: false)
             floor.components.set(PhysicsBodyComponent(mode: .static))
-            
             root.addChild(floor)
             
-            let box = ModelEntity(
-                mesh: .generateBox(size: 0.3),
-                materials: [SimpleMaterial(color: .red, isMetallic: false)]
-            )
-            box.position = [0, 1.5, -2.0]
-            box.generateCollisionShapes(recursive: false)
+            // --- CREATE INITIAL OBJECT ---
+            let object = ModelEntity() // Empty initially
+            object.position = [0, 1.5, -2.0]
             
-            box.components.set(InputTargetComponent(allowedInputTypes: .all))
+            // Basic Components
+            object.components.set(InputTargetComponent(allowedInputTypes: .all))
             
+            // Initial Physics Setup
             let material = PhysicsMaterialResource.generate(
                 staticFriction: appModel.staticFriction,
                 dynamicFriction: appModel.dynamicFriction,
@@ -50,25 +58,44 @@ struct ImmersiveView: View {
                 mode: appModel.selectedMode.rkMode
             )
             physicsBody.linearDamping = appModel.linearDamping
-            box.components.set(physicsBody)
+            object.components.set(physicsBody)
             
-            root.addChild(box)
-            self.boxEntity = box
+            root.addChild(object)
+            self.objectEntity = object
+            
+            // Apply the initial shape
+            updateShape()
             
             // --- 2. SUBSCRIBE TO UPDATES ---
             _ = content.subscribe(to: SceneEvents.Update.self) { event in
-                guard let box = boxEntity,
-                      let motion = box.components[PhysicsMotionComponent.self] else { return }
+                guard let obj = objectEntity,
+                      let motion = obj.components[PhysicsMotionComponent.self] else { return }
                 
+                // 1. Update Speed
                 let velocity = motion.linearVelocity
                 let speed = length(velocity)
                 appModel.currentSpeed = speed
                 
-                // Update Gravity via the Component on Root
+                // 2. Update Gravity
                 if let root = rootEntity,
                    var physSim = root.components[PhysicsSimulationComponent.self] {
                     physSim.gravity = [0, appModel.gravity, 0]
                     root.components.set(physSim)
+                }
+                
+                // 3. Update Path Plotter
+                if appModel.showPath {
+                    let currentPos = obj.position(relativeTo: nil)
+                    
+                    if let lastPos = lastMarkerPosition {
+                        let distance = length(currentPos - lastPos)
+                        if distance > 0.05 { // 5 cm threshold
+                            addPathMarker(at: currentPos)
+                            lastMarkerPosition = currentPos
+                        }
+                    } else {
+                        lastMarkerPosition = currentPos
+                    }
                 }
             }
             
@@ -80,7 +107,6 @@ struct ImmersiveView: View {
                 .targetedToAnyEntity()
                 .onChanged { value in
                     let entity = value.entity
-                    
                     appModel.isDragging = true
                     
                     if var body = entity.components[PhysicsBodyComponent.self] {
@@ -96,7 +122,6 @@ struct ImmersiveView: View {
                 }
                 .onEnded { value in
                     let entity = value.entity
-                    
                     appModel.isDragging = false
                     
                     if var body = entity.components[PhysicsBodyComponent.self] {
@@ -104,43 +129,23 @@ struct ImmersiveView: View {
                         entity.components.set(body)
                     }
                     
+                    // Force Drop
                     if appModel.selectedMode == .dynamic {
-                        
-                        // CHANGED: Check if throwing is enabled
-                        if appModel.isThrowingEnabled {
-                            let currentPos = value.location3D
-                            let predictedPos = value.predictedEndLocation3D
-                            
-                            let deltaX = Float(predictedPos.x - currentPos.x)
-                            let deltaY = Float(predictedPos.y - currentPos.y)
-                            let deltaZ = Float(predictedPos.z - currentPos.z)
-                            
-                            let strength = appModel.throwStrength
-                            let throwVel = SIMD3<Float>(deltaX * strength, deltaY * strength, deltaZ * strength)
-                            
-                            appModel.lastThrowVector = String(format: "%.1f, %.1f, %.1f", throwVel.x, throwVel.y, throwVel.z)
-                            
-                            var motion = PhysicsMotionComponent()
-                            motion.linearVelocity = throwVel
-                            motion.angularVelocity = [Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1)]
-                            entity.components.set(motion)
-                        } else {
-                            // CHANGED: Just Drop (Zero Velocity)
-                            appModel.lastThrowVector = "Dropped (0,0,0)"
-                            var motion = PhysicsMotionComponent()
-                            motion.linearVelocity = .zero // Dead stop
-                            motion.angularVelocity = .zero
-                            entity.components.set(motion)
-                        }
+                        var motion = PhysicsMotionComponent()
+                        motion.linearVelocity = .zero
+                        motion.angularVelocity = .zero
+                        entity.components.set(motion)
                     }
                 }
         )
         // --- EVENT HANDLERS ---
         .onChange(of: appModel.resetSignal) {
-            guard let box = boxEntity else { return }
-            box.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
-            box.position = [0, 1.5, -2.0]
-            appModel.lastThrowVector = "0.0, 0.0, 0.0"
+            guard let obj = objectEntity else { return }
+            obj.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
+            obj.position = [0, 1.5, -2.0]
+            
+            traceRoot?.children.removeAll()
+            lastMarkerPosition = nil
         }
         .onChange(of: [appModel.mass, appModel.restitution, appModel.dynamicFriction, appModel.staticFriction, appModel.linearDamping] as [Float]) {
             updatePhysicsProperties()
@@ -148,10 +153,52 @@ struct ImmersiveView: View {
         .onChange(of: appModel.selectedMode) {
             updatePhysicsProperties()
         }
+        .onChange(of: appModel.showPath) {
+            if !appModel.showPath {
+                traceRoot?.children.removeAll()
+                lastMarkerPosition = nil
+            }
+        }
+        // NEW: Shape Change
+        .onChange(of: appModel.selectedShape) {
+            updateShape()
+        }
+    }
+    
+    // MARK: - Updates
+    func updateShape() {
+        guard let obj = objectEntity else { return }
+        
+        // 1. Generate new Mesh and Material
+        // We use a different color for each shape to make it visually distinct
+        let newMesh: MeshResource
+        let newMaterial: SimpleMaterial
+        
+        switch appModel.selectedShape {
+        case .box:
+            newMesh = .generateBox(size: 0.3)
+            newMaterial = SimpleMaterial(color: .red, isMetallic: false)
+        case .sphere:
+            newMesh = .generateSphere(radius: 0.15)
+            newMaterial = SimpleMaterial(color: .blue, isMetallic: false)
+        case .cylinder:
+            newMesh = .generateCylinder(height: 0.3, radius: 0.15)
+            newMaterial = SimpleMaterial(color: .green, isMetallic: false)
+        }
+        
+        // 2. Apply Mesh
+        obj.model = ModelComponent(mesh: newMesh, materials: [newMaterial])
+        
+        // 3. Regenerate Collision Shape (Critical for physics!)
+        // 'recursive: false' is fine since it's a single primitive
+        obj.generateCollisionShapes(recursive: false)
+        
+        // Note: We don't need to re-add the physics body component;
+        // RealityKit will use the new collision shape automatically for the existing body.
     }
     
     func updatePhysicsProperties() {
-        guard let box = boxEntity else { return }
+        guard let obj = objectEntity else { return }
         
         let newMaterial = PhysicsMaterialResource.generate(
             staticFriction: appModel.staticFriction,
@@ -159,20 +206,33 @@ struct ImmersiveView: View {
             restitution: appModel.restitution
         )
         
-        var bodyComponent = box.components[PhysicsBodyComponent.self] ?? PhysicsBodyComponent()
+        var bodyComponent = obj.components[PhysicsBodyComponent.self] ?? PhysicsBodyComponent()
         bodyComponent.massProperties.mass = appModel.mass
         bodyComponent.material = newMaterial
         bodyComponent.mode = appModel.selectedMode.rkMode
         bodyComponent.linearDamping = appModel.linearDamping
-        box.components.set(bodyComponent)
+        obj.components.set(bodyComponent)
         
         switch appModel.selectedMode {
         case .dynamic: break
         case .staticMode:
-            box.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
+            obj.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
         case .kinematic:
             let spinSpeed: Float = 1.0
-            box.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: [0, spinSpeed, 0]))
+            obj.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: [0, spinSpeed, 0]))
         }
+    }
+    
+    // MARK: - Path Plotter
+    private func addPathMarker(at position: SIMD3<Float>) {
+        guard let parent = traceRoot else { return }
+        
+        let mesh = MeshResource.generateSphere(radius: 0.005)
+        let material = UnlitMaterial(color: .yellow)
+        let marker = ModelEntity(mesh: mesh, materials: [material])
+        
+        marker.position = position
+        
+        parent.addChild(marker)
     }
 }
