@@ -12,10 +12,14 @@ struct ImmersiveView: View {
     @State private var rampEntity: ModelEntity?
     @State private var floorEntity: ModelEntity?
     
-    // ARKit / Scene Reconstruction
+    // ARKit Providers
     @State private var session = ARKitSession()
     @State private var sceneReconstruction = SceneReconstructionProvider()
-    @State private var meshEntities = [UUID: ModelEntity]() // Track real-world mesh chunks
+    @State private var handTracking = HandTrackingProvider()
+    
+    // Tracked Entities
+    @State private var meshEntities = [UUID: ModelEntity]()
+    @State private var fingerEntities: [HandAnchor.Chirality: ModelEntity] = [:]
     
     // Logic State
     @State private var lastMarkerPosition: SIMD3<Float>? = nil
@@ -39,6 +43,13 @@ struct ImmersiveView: View {
             root.addChild(traces)
             self.traceRoot = traces
             
+            // --- FINGERTIPS (Kinematic bodies to push objects) ---
+            let leftFinger = createFingertip()
+            let rightFinger = createFingertip()
+            root.addChild(leftFinger)
+            root.addChild(rightFinger)
+            self.fingerEntities = [.left: leftFinger, .right: rightFinger]
+            
             // --- VIRTUAL ENVIRONMENT ---
             let floor = ModelEntity(
                 mesh: .generatePlane(width: 4.0, depth: 4.0),
@@ -47,12 +58,12 @@ struct ImmersiveView: View {
             floor.position = [0, 0, -2.0]
             floor.generateCollisionShapes(recursive: false)
             floor.components.set(PhysicsBodyComponent(mode: .static))
-            floor.isEnabled = (appViewModel.selectedEnvironment == .virtual) // Hide if Real World
+            floor.isEnabled = (appViewModel.selectedEnvironment == .virtual)
             root.addChild(floor)
             self.floorEntity = floor
             
             // ---------------------------------------------------------
-            // 1. SETUP RAMP (Virtual only)
+            // SETUP RAMP
             // ---------------------------------------------------------
             let ramp = ModelEntity()
             ramp.name = "Ramp"
@@ -62,8 +73,6 @@ struct ImmersiveView: View {
             
             let initialRadians = appViewModel.rampRotation * (Float.pi / 180.0)
             ramp.transform.rotation = simd_quatf(angle: initialRadians, axis: [0, 1, 0])
-            
-            // Enable only if Virtual AND Show Ramp is on
             ramp.isEnabled = (appViewModel.selectedEnvironment == .virtual && appViewModel.showRamp)
             
             root.addChild(ramp)
@@ -71,13 +80,10 @@ struct ImmersiveView: View {
             
             updateRamp()
             
-            // ---------------------------------------------------------
-
             // --- CREATE INITIAL OBJECT ---
-            let object = ModelEntity() // Empty initially
+            let object = ModelEntity()
             object.name = "PhysicsObject"
             object.position = [0, 1.5, -2.0]
-            
             object.components.set(InputTargetComponent(allowedInputTypes: .all))
             
             let material = PhysicsMaterialResource.generate(
@@ -103,12 +109,10 @@ struct ImmersiveView: View {
                 guard let obj = objectEntity,
                       let motion = obj.components[PhysicsMotionComponent.self] else { return }
                 
-                // 1. Update Speed
                 let velocity = motion.linearVelocity
                 let speed = length(velocity)
                 appViewModel.currentSpeed = speed
                 
-                // 1b. Apply Advanced Air Resistance
                 if appViewModel.useAdvancedDrag {
                     if speed > 0.001 {
                         let rho = appViewModel.airDensity
@@ -120,14 +124,12 @@ struct ImmersiveView: View {
                     }
                 }
                 
-                // 2. Update Gravity
                 if let root = rootEntity,
                    var physSim = root.components[PhysicsSimulationComponent.self] {
                     physSim.gravity = [0, appViewModel.gravity, 0]
                     root.components.set(physSim)
                 }
                 
-                // 3. Update Path Plotter
                 if appViewModel.showPath {
                     let currentPos = obj.position(relativeTo: nil)
                     if let lastPos = lastMarkerPosition {
@@ -143,11 +145,15 @@ struct ImmersiveView: View {
             
         } update: { content in }
         
-        // --- 3. SCENE RECONSTRUCTION TASK ---
+        // --- 3. ARKIT TASKS ---
         .task {
-            // Only run in Mixed Reality mode
             if appViewModel.selectedEnvironment == .mixed {
-                await processSceneReconstruction()
+                await runARKitSession()
+            }
+        }
+        .task {
+            if appViewModel.selectedEnvironment == .mixed {
+                await processHandUpdates()
             }
         }
         
@@ -157,9 +163,7 @@ struct ImmersiveView: View {
                 .targetedToAnyEntity()
                 .onChanged { value in
                     let entity = value.entity
-                    
-                    // Don't drag the room mesh!
-                    if entity.name == "SceneMesh" { return }
+                    if entity.name == "SceneMesh" || entity.name == "Fingertip" { return }
                     
                     appViewModel.isDragging = true
                     
@@ -183,8 +187,6 @@ struct ImmersiveView: View {
                         newPos.y = 0.0
                         entity.position = newPos
                     } else {
-                        // In Real World mode, we might want to allow dropping lower than the virtual floor height
-                        // But let's keep a sane min height so we don't lose objects.
                         let minHeight: Float = (appViewModel.selectedEnvironment == .virtual) ? 0.16 : -1.0
                         if newPos.y < minHeight { newPos.y = minHeight }
                         entity.position = newPos
@@ -192,7 +194,7 @@ struct ImmersiveView: View {
                 }
                 .onEnded { value in
                     let entity = value.entity
-                    if entity.name == "SceneMesh" { return }
+                    if entity.name == "SceneMesh" || entity.name == "Fingertip" { return }
                     
                     appViewModel.isDragging = false
                     initialDragPosition = nil
@@ -255,72 +257,79 @@ struct ImmersiveView: View {
         }
     }
     
-    // MARK: - Scene Reconstruction
-    func processSceneReconstruction() async {
-        // Check if device supports it
-        guard SceneReconstructionProvider.isSupported else {
-            print("Scene Reconstruction not supported on this device.")
-            return
-        }
+    // MARK: - ARKit Logic
+    
+    @MainActor
+    func runARKitSession() async {
+        guard SceneReconstructionProvider.isSupported && HandTrackingProvider.isSupported else { return }
         
         do {
-            // Start the session with scene reconstruction
-            try await session.run([sceneReconstruction])
-            print("Scene Reconstruction Session Started")
+            try await session.run([sceneReconstruction, handTracking])
             
-            // Process updates
             for await update in sceneReconstruction.anchorUpdates {
                 let meshAnchor = update.anchor
                 
+                guard let shape = try? await ShapeResource.generateStaticMesh(from: meshAnchor) else { continue }
+                
                 switch update.event {
                 case .added, .updated:
-                    await updateMeshEntity(for: meshAnchor)
+                    if let entity = meshEntities[meshAnchor.id] {
+                        entity.transform = Transform(matrix: meshAnchor.originFromAnchorTransform)
+                        entity.collision?.shapes = [shape]
+                    } else {
+                        let entity = ModelEntity()
+                        entity.name = "SceneMesh"
+                        entity.transform = Transform(matrix: meshAnchor.originFromAnchorTransform)
+                        entity.collision = CollisionComponent(shapes: [shape], isStatic: true)
+                        entity.components.set(PhysicsBodyComponent(mode: .static))
+                        
+                        rootEntity?.addChild(entity)
+                        meshEntities[meshAnchor.id] = entity
+                    }
                 case .removed:
-                    removeMeshEntity(for: meshAnchor)
+                    meshEntities[meshAnchor.id]?.removeFromParent()
+                    meshEntities.removeValue(forKey: meshAnchor.id)
                 }
             }
         } catch {
-            print("Failed to run ARKit session: \(error)")
+            print("ARKit Session failed: \(error)")
         }
     }
     
-    func updateMeshEntity(for anchor: MeshAnchor) async {
-        guard let root = rootEntity else { return }
-        
-        // Create a ShapeResource for physics collision
-        // This is the key part for physics interaction!
-        // IN visionOS, this call is ASYNC.
-        guard let shape = try? await ShapeResource.generateStaticMesh(from: anchor) else {
-            return
-        }
-        
-        // If we already have an entity, just update its collider/mesh
-        if let existingEntity = meshEntities[anchor.id] {
-            existingEntity.transform = Transform(matrix: anchor.originFromAnchorTransform)
-            existingEntity.collision?.shapes = [shape]
-            return
-        }
-        
-        // Create new entity
-        let entity = ModelEntity()
-        entity.name = "SceneMesh"
-        entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
-        
-        // Add Physics
-        entity.collision = CollisionComponent(shapes: [shape])
-        entity.components.set(PhysicsBodyComponent(mode: .static))
-        
-        root.addChild(entity)
-        meshEntities[anchor.id] = entity
-    }
-    
-    func removeMeshEntity(for anchor: MeshAnchor) {
-        if let entity = meshEntities[anchor.id] {
-            entity.removeFromParent()
-            meshEntities.removeValue(forKey: anchor.id)
+    @MainActor
+    func processHandUpdates() async {
+        for await update in handTracking.anchorUpdates {
+            let handAnchor = update.anchor
+            
+            guard handAnchor.isTracked,
+                  let fingerTip = handAnchor.handSkeleton?.joint(.indexFingerTip),
+                  fingerTip.isTracked else {
+                fingerEntities[handAnchor.chirality]?.isEnabled = false
+                continue
+            }
+            
+            let transform = handAnchor.originFromAnchorTransform * fingerTip.anchorFromJointTransform
+            if let entity = fingerEntities[handAnchor.chirality] {
+                entity.isEnabled = true
+                entity.setTransformMatrix(transform, relativeTo: nil)
+            }
         }
     }
     
+    private func createFingertip() -> ModelEntity {
+        let entity = ModelEntity(
+            mesh: .generateSphere(radius: 0.01),
+            materials: [UnlitMaterial(color: .cyan)],
+            collisionShape: .generateSphere(radius: 0.01),
+            mass: 0.0
+        )
+        entity.name = "Fingertip"
+        entity.components.set(PhysicsBodyComponent(mode: .kinematic))
+        entity.components.set(OpacityComponent(opacity: 0.0)) // Invisible
+        entity.isEnabled = false
+        return entity
+    }
+
     // MARK: - Updates
     func updateShape() {
         guard let obj = objectEntity else { return }
@@ -357,9 +366,6 @@ struct ImmersiveView: View {
         bodyComponent.massProperties.mass = appViewModel.mass
         bodyComponent.material = newMaterial
         bodyComponent.mode = appViewModel.selectedMode.rkMode
-        
-        // If Advanced Drag is on, we apply force manually, so disable built-in linear damping
-        // Otherwise use the slider value
         bodyComponent.linearDamping = appViewModel.useAdvancedDrag ? 0.0 : appViewModel.linearDamping
         
         obj.components.set(bodyComponent)
@@ -368,59 +374,27 @@ struct ImmersiveView: View {
     func updateRamp() {
         guard let ramp = rampEntity else { return }
         
-        // Dimensions
         let slopeLength = appViewModel.rampLength
         let radians = appViewModel.rampAngle * (Float.pi / 180.0)
-        
-        // Calculate Height and Base
         let height = slopeLength * sin(radians)
         let baseLength = slopeLength * cos(radians)
-        
-        let width = appViewModel.rampWidth // Depth of the ramp (track width)
+        let width = appViewModel.rampWidth
         
         var descriptor = MeshDescriptor(name: "wedge")
-        
-        // Coordinates
         let frontZ: Float = width / 2
         let backZ: Float = -width / 2
-        
-        // We want the slope to go from Left (High) to Right (Low)
         let leftX: Float = -baseLength / 2
         let rightX: Float = baseLength / 2
-        
         let topY: Float = height
         let bottomY: Float = 0.0
         
         descriptor.positions = MeshBuffers.Positions([
-            // Front Face Vertices (0, 1, 2)
-            [leftX, topY, frontZ],      // 0: Top Left (High Point)
-            [leftX, bottomY, frontZ],   // 1: Bottom Left (Corner)
-            [rightX, bottomY, frontZ],  // 2: Bottom Right (End of Slope)
-            
-            // Back Face Vertices (3, 4, 5)
-            [leftX, topY, backZ],       // 3: Top Left (High Point)
-            [leftX, bottomY, backZ],    // 4: Bottom Left (Corner)
-            [rightX, bottomY, backZ]    // 5: Bottom Right (End of Slope)
+            [leftX, topY, frontZ], [leftX, bottomY, frontZ], [rightX, bottomY, frontZ],
+            [leftX, topY, backZ], [leftX, bottomY, backZ], [rightX, bottomY, backZ]
         ])
         
         descriptor.primitives = .triangles([
-            // Front Face
-            0, 1, 2,
-            
-            // Back Face (Clockwise)
-            3, 5, 4,
-            
-            // Vertical Back Wall (Left Side)
-            0, 4, 1,
-            0, 3, 4,
-            
-            // Sloped Face (Hypotenuse Rectangle)
-            0, 2, 5,
-            0, 5, 3,
-            
-            // Bottom Face
-            1, 4, 5,
-            1, 5, 2
+            0, 1, 2, 3, 5, 4, 0, 4, 1, 0, 3, 4, 0, 2, 5, 0, 5, 3, 1, 4, 5, 1, 5, 2
         ])
         
         if let rampMesh = try? MeshResource.generate(from: [descriptor]) {
@@ -428,36 +402,24 @@ struct ImmersiveView: View {
                 mesh: rampMesh,
                 materials: [SimpleMaterial(color: .cyan.withAlphaComponent(0.8), isMetallic: false)]
             )
-            
-            // Update Collision Shape (Force Convex Hull for accurate wedge shape)
-            // This prevents the "invisible volume" (bounding box) issue.
             if let shape = try? ShapeResource.generateConvex(from: rampMesh) {
                 ramp.collision = CollisionComponent(shapes: [shape])
             } else {
                 ramp.generateCollisionShapes(recursive: false)
             }
-            
-            // Ensure Physics Body is Static
-            // (Should be already set, but good to ensure if shape changes significantly)
             if ramp.components[PhysicsBodyComponent.self] == nil {
                 ramp.components.set(PhysicsBodyComponent(mode: .static))
             }
-            
-            // Ensure visibility
             ramp.isEnabled = (appViewModel.selectedEnvironment == .virtual && appViewModel.showRamp)
         }
     }
     
-    // MARK: - Path Plotter
     private func addPathMarker(at position: SIMD3<Float>) {
         guard let parent = traceRoot else { return }
-        
         let mesh = MeshResource.generateSphere(radius: 0.005)
         let material = UnlitMaterial(color: .yellow)
         let marker = ModelEntity(mesh: mesh, materials: [material])
-        
         marker.position = position
-        
         parent.addChild(marker)
     }
 }

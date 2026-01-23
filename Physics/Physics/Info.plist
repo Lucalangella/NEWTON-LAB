@@ -21,5 +21,7 @@
 	</dict>
     <key>NSWorldSensingUsageDescription</key>
     <string>We use scene reconstruction to let virtual objects interact with your real room.</string>
+    <key>NSHandsTrackingUsageDescription</key>
+    <string>We use hand tracking to let you interact with virtual objects using your hands.</string>
 </dict>
 </plist>
