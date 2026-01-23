@@ -111,4 +111,5 @@ struct LaunchView: View {
 #Preview(windowStyle: .automatic) {
     LaunchView()
         .environment(AppViewModel())
+        .frame(width: 800, height: 500)
 }
