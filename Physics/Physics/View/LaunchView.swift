@@ -38,10 +38,11 @@ struct LaunchView: View {
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: 200)
                         }
-                        .padding(30)
-                        .glassBackgroundEffect()
+                        .padding(15)
                     }
-                    .buttonStyle(.plain)
+                    .glassBackgroundEffect()
+                    .buttonBorderShape(.roundedRectangle(radius: 30))
+                    
                     
                     // Option 2: Real World
                     Button {
@@ -62,10 +63,11 @@ struct LaunchView: View {
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: 200)
                         }
-                        .padding(30)
-                        .glassBackgroundEffect()
+                        .padding(15)
                     }
-                    .buttonStyle(.plain)
+                    .glassBackgroundEffect()
+                    .buttonBorderShape(.roundedRectangle(radius: 30))
+                    
                 }
             }
             .navigationDestination(isPresented: $navigateToControls) {
