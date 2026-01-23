@@ -72,6 +72,16 @@ struct LaunchView: View {
                 PhysicsControlView()
             }
         }
+        .onChange(of: navigateToControls) { _, isPresented in
+            // If the user navigated BACK (isPresented became false), close the space.
+            if !isPresented && appViewModel.immersiveSpaceState == .open {
+                Task {
+                    appViewModel.immersiveSpaceState = .inTransition
+                    await dismissImmersiveSpace()
+                    appViewModel.immersiveSpaceState = .closed
+                }
+            }
+        }
     }
     
     func selectMode(_ mode: PhysicsEnvironmentMode) {
