@@ -10,18 +10,8 @@ struct PhysicsLabApp: App {
 
     var body: some Scene {
         WindowGroup {
-            PhysicsControlView()
+            LaunchView()
                 .environment(appViewModel)
-                .task {
-                    // In a Volumetric app, we usually don't open an ImmersiveSpace immediately,
-                    // because the Volume *is* the space.
-                    // But if you want the "World" physics, we can keep this.
-                    if appViewModel.immersiveSpaceState == .closed {
-                        appViewModel.immersiveSpaceState = .inTransition
-                        await openImmersiveSpace(id: "PhysicsSpace")
-                        appViewModel.immersiveSpaceState = .open
-                    }
-                }
         }
         // --- 1. SET STYLE TO AUTOMATIC (Standard Window) ---
         .windowStyle(.automatic)

@@ -1,5 +1,6 @@
 import SwiftUI
 import RealityKit
+import ARKit
 
 struct ImmersiveView: View {
     @Environment(AppViewModel.self) var appViewModel
@@ -9,6 +10,12 @@ struct ImmersiveView: View {
     @State private var rootEntity: Entity?
     @State private var traceRoot: Entity?
     @State private var rampEntity: ModelEntity?
+    @State private var floorEntity: ModelEntity?
+    
+    // ARKit / Scene Reconstruction
+    @State private var session = ARKitSession()
+    @State private var sceneReconstruction = SceneReconstructionProvider()
+    @State private var meshEntities = [UUID: ModelEntity]() // Track real-world mesh chunks
     
     // Logic State
     @State private var lastMarkerPosition: SIMD3<Float>? = nil
@@ -32,6 +39,7 @@ struct ImmersiveView: View {
             root.addChild(traces)
             self.traceRoot = traces
             
+            // --- VIRTUAL ENVIRONMENT ---
             let floor = ModelEntity(
                 mesh: .generatePlane(width: 4.0, depth: 4.0),
                 materials: [SimpleMaterial(color: .gray.withAlphaComponent(0.5), isMetallic: false)]
@@ -39,43 +47,39 @@ struct ImmersiveView: View {
             floor.position = [0, 0, -2.0]
             floor.generateCollisionShapes(recursive: false)
             floor.components.set(PhysicsBodyComponent(mode: .static))
+            floor.isEnabled = (appViewModel.selectedEnvironment == .virtual) // Hide if Real World
             root.addChild(floor)
+            self.floorEntity = floor
             
             // ---------------------------------------------------------
-            // 1. SETUP RAMP
+            // 1. SETUP RAMP (Virtual only)
             // ---------------------------------------------------------
             let ramp = ModelEntity()
             ramp.name = "Ramp"
-            ramp.position = [0, 0, -2.0] // Base on floor
-            
-            // Allow user to grab it
+            ramp.position = [0, 0, -2.0]
             ramp.components.set(InputTargetComponent(allowedInputTypes: .all))
-            
-            // Physics: Static (won't move) but objects can hit it
             ramp.components.set(PhysicsBodyComponent(mode: .static))
             
-            // Apply initial rotation
             let initialRadians = appViewModel.rampRotation * (Float.pi / 180.0)
             ramp.transform.rotation = simd_quatf(angle: initialRadians, axis: [0, 1, 0])
+            
+            // Enable only if Virtual AND Show Ramp is on
+            ramp.isEnabled = (appViewModel.selectedEnvironment == .virtual && appViewModel.showRamp)
             
             root.addChild(ramp)
             self.rampEntity = ramp
             
-            // Generate initial mesh
             updateRamp()
             
             // ---------------------------------------------------------
 
-            
             // --- CREATE INITIAL OBJECT ---
             let object = ModelEntity() // Empty initially
             object.name = "PhysicsObject"
             object.position = [0, 1.5, -2.0]
             
-            // Basic Components
             object.components.set(InputTargetComponent(allowedInputTypes: .all))
             
-            // Initial Physics Setup
             let material = PhysicsMaterialResource.generate(
                 staticFriction: appViewModel.staticFriction,
                 dynamicFriction: appViewModel.dynamicFriction,
@@ -92,7 +96,6 @@ struct ImmersiveView: View {
             root.addChild(object)
             self.objectEntity = object
             
-            // Apply the initial shape
             updateShape()
             
             // --- 2. SUBSCRIBE TO UPDATES ---
@@ -105,23 +108,14 @@ struct ImmersiveView: View {
                 let speed = length(velocity)
                 appViewModel.currentSpeed = speed
                 
-                // 1b. Apply Advanced Air Resistance (Drag)
+                // 1b. Apply Advanced Air Resistance
                 if appViewModel.useAdvancedDrag {
-                    // Formula: Fd = 0.5 * rho * v^2 * Cd * A
-                    // Direction: Opposite to velocity
-                    
-                    if speed > 0.001 { // Avoid divide by zero
+                    if speed > 0.001 {
                         let rho = appViewModel.airDensity
                         let A = appViewModel.crossSectionalArea
                         let Cd = appViewModel.dragCoefficient
-                        
                         let dragMagnitude = 0.5 * rho * (speed * speed) * Cd * A
-                        
-                        // Direction is -velocity (normalized)
-                        // force = magnitude * direction
-                        //       = magnitude * (-velocity / speed)
                         let dragForce = -velocity / speed * dragMagnitude
-                        
                         obj.addForce(dragForce, relativeTo: nil)
                     }
                 }
@@ -136,10 +130,8 @@ struct ImmersiveView: View {
                 // 3. Update Path Plotter
                 if appViewModel.showPath {
                     let currentPos = obj.position(relativeTo: nil)
-                    
                     if let lastPos = lastMarkerPosition {
-                        let distance = length(currentPos - lastPos)
-                        if distance > 0.05 { // 5 cm threshold
+                        if length(currentPos - lastPos) > 0.05 {
                             addPathMarker(at: currentPos)
                             lastMarkerPosition = currentPos
                         }
@@ -151,69 +143,70 @@ struct ImmersiveView: View {
             
         } update: { content in }
         
-        // --- 3. GESTURE ---
+        // --- 3. SCENE RECONSTRUCTION TASK ---
+        .task {
+            // Only run in Mixed Reality mode
+            if appViewModel.selectedEnvironment == .mixed {
+                await processSceneReconstruction()
+            }
+        }
+        
+        // --- 4. GESTURE ---
         .gesture(
             DragGesture()
                 .targetedToAnyEntity()
                 .onChanged { value in
                     let entity = value.entity
+                    
+                    // Don't drag the room mesh!
+                    if entity.name == "SceneMesh" { return }
+                    
                     appViewModel.isDragging = true
                     
-                    // 1. Capture initial position if needed
                     if initialDragPosition == nil {
                         initialDragPosition = entity.position(relativeTo: entity.parent)
                     }
-                    
                     guard let startPos = initialDragPosition else { return }
                     
-                    // 2. Switch to Kinematic for control
-                    // Only do this once per gesture start ideally, or check current mode
                     if var body = entity.components[PhysicsBodyComponent.self], body.mode != .kinematic {
                         body.mode = .kinematic
                         entity.components.set(body)
-                        // Stop any existing momentum
                         entity.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
                     }
                     
-                    // 3. Calculate New Position (Offset-based)
-                    // Convert the start and current locations from local (view) space to the entity's parent space.
                     let startLocParent = value.convert(value.startLocation3D, from: .local, to: entity.parent!)
                     let currentLocParent = value.convert(value.location3D, from: .local, to: entity.parent!)
-                    
                     let translation = currentLocParent - startLocParent
                     var newPos = startPos + translation
                     
-                    // 4. Apply Constraints
                     if entity.name == "Ramp" {
-                        // RAMP LOGIC: Lock to floor
                         newPos.y = 0.0
                         entity.position = newPos
-                        
                     } else {
-                        // OBJECT LOGIC: Constrain to min height (prevent clipping floor)
-                        if newPos.y < 0.16 { newPos.y = 0.16 }
+                        // In Real World mode, we might want to allow dropping lower than the virtual floor height
+                        // But let's keep a sane min height so we don't lose objects.
+                        let minHeight: Float = (appViewModel.selectedEnvironment == .virtual) ? 0.16 : -1.0
+                        if newPos.y < minHeight { newPos.y = minHeight }
                         entity.position = newPos
                     }
                 }
                 .onEnded { value in
                     let entity = value.entity
+                    if entity.name == "SceneMesh" { return }
+                    
                     appViewModel.isDragging = false
-                    initialDragPosition = nil // Reset for next gesture
+                    initialDragPosition = nil
                     
                     if entity.name == "Ramp" {
-                        // RAMP LOGIC: Restore Static
                         if var body = entity.components[PhysicsBodyComponent.self] {
                             body.mode = .static
                             entity.components.set(body)
                         }
                     } else {
-                        // OBJECT LOGIC: Restore Selected Mode
                         if var body = entity.components[PhysicsBodyComponent.self] {
                             body.mode = appViewModel.selectedMode.rkMode
                             entity.components.set(body)
                         }
-                        
-                        // Stop movement on drop if dynamic
                         if appViewModel.selectedMode == .dynamic {
                             var motion = PhysicsMotionComponent()
                             motion.linearVelocity = .zero
@@ -228,7 +221,6 @@ struct ImmersiveView: View {
             guard let obj = objectEntity else { return }
             obj.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
             obj.position = [0, 1.5, -2.0]
-            
             traceRoot?.children.removeAll()
             lastMarkerPosition = nil
         }
@@ -250,19 +242,82 @@ struct ImmersiveView: View {
         .onChange(of: appViewModel.selectedShape) {
             updateShape()
         }
-        // Handle Ramp Visibility
         .onChange(of: appViewModel.showRamp) {
-            rampEntity?.isEnabled = appViewModel.showRamp
+            rampEntity?.isEnabled = (appViewModel.selectedEnvironment == .virtual && appViewModel.showRamp)
         }
-        // Handle Ramp Changes
         .onChange(of: [appViewModel.rampAngle, appViewModel.rampLength, appViewModel.rampWidth]) {
             updateRamp()
         }
-        // Handle Ramp Rotation (Yaw)
         .onChange(of: appViewModel.rampRotation) {
             guard let ramp = rampEntity else { return }
             let radians = appViewModel.rampRotation * (Float.pi / 180.0)
             ramp.transform.rotation = simd_quatf(angle: radians, axis: [0, 1, 0])
+        }
+    }
+    
+    // MARK: - Scene Reconstruction
+    func processSceneReconstruction() async {
+        // Check if device supports it
+        guard SceneReconstructionProvider.isSupported else {
+            print("Scene Reconstruction not supported on this device.")
+            return
+        }
+        
+        do {
+            // Start the session with scene reconstruction
+            try await session.run([sceneReconstruction])
+            print("Scene Reconstruction Session Started")
+            
+            // Process updates
+            for await update in sceneReconstruction.anchorUpdates {
+                let meshAnchor = update.anchor
+                
+                switch update.event {
+                case .added, .updated:
+                    await updateMeshEntity(for: meshAnchor)
+                case .removed:
+                    removeMeshEntity(for: meshAnchor)
+                }
+            }
+        } catch {
+            print("Failed to run ARKit session: \(error)")
+        }
+    }
+    
+    func updateMeshEntity(for anchor: MeshAnchor) async {
+        guard let root = rootEntity else { return }
+        
+        // Create a ShapeResource for physics collision
+        // This is the key part for physics interaction!
+        // IN visionOS, this call is ASYNC.
+        guard let shape = try? await ShapeResource.generateStaticMesh(from: anchor) else {
+            return
+        }
+        
+        // If we already have an entity, just update its collider/mesh
+        if let existingEntity = meshEntities[anchor.id] {
+            existingEntity.transform = Transform(matrix: anchor.originFromAnchorTransform)
+            existingEntity.collision?.shapes = [shape]
+            return
+        }
+        
+        // Create new entity
+        let entity = ModelEntity()
+        entity.name = "SceneMesh"
+        entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
+        
+        // Add Physics
+        entity.collision = CollisionComponent(shapes: [shape])
+        entity.components.set(PhysicsBodyComponent(mode: .static))
+        
+        root.addChild(entity)
+        meshEntities[anchor.id] = entity
+    }
+    
+    func removeMeshEntity(for anchor: MeshAnchor) {
+        if let entity = meshEntities[anchor.id] {
+            entity.removeFromParent()
+            meshEntities.removeValue(forKey: anchor.id)
         }
     }
     
@@ -389,7 +444,7 @@ struct ImmersiveView: View {
             }
             
             // Ensure visibility
-            ramp.isEnabled = appViewModel.showRamp
+            ramp.isEnabled = (appViewModel.selectedEnvironment == .virtual && appViewModel.showRamp)
         }
     }
     

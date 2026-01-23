@@ -19,5 +19,7 @@
 			</array>
 		</dict>
 	</dict>
+    <key>NSWorldSensingUsageDescription</key>
+    <string>We use scene reconstruction to let virtual objects interact with your real room.</string>
 </dict>
 </plist>

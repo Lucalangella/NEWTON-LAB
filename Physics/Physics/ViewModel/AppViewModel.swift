@@ -15,6 +15,9 @@ class AppViewModel {
     var immersiveSpaceState: ImmersiveSpaceState = .closed
     var resetSignal = false
     
+    // --- Environment ---
+    var selectedEnvironment: PhysicsEnvironmentMode = .virtual
+    
     // --- Live Data ---
     var currentSpeed: Float = 0.0
     
