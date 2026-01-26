@@ -17,6 +17,8 @@ class AppViewModel {
     
     // --- Environment ---
     var selectedEnvironment: PhysicsEnvironmentMode = .virtual
+    var showWalls: Bool = false
+    var wallHeight: Float = 0.5
     
     // --- Live Data ---
     var currentSpeed: Float = 0.0

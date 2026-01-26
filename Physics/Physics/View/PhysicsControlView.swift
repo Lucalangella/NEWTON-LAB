@@ -28,6 +28,20 @@ struct PhysicsControlView: View {
                         }
                         Slider(value: Bindable(appViewModel).gravity, in: -20.0...0.0)
                     }
+                    
+                    Toggle("Show Walls", isOn: Bindable(appViewModel).showWalls)
+                    
+                    if appViewModel.showWalls {
+                        VStack {
+                            HStack {
+                                Text("Wall Height")
+                                Spacer()
+                                Text(String(format: "%.2f m", appViewModel.wallHeight))
+                                    .foregroundStyle(.blue)
+                            }
+                            Slider(value: Bindable(appViewModel).wallHeight, in: 0.1...2.0)
+                        }
+                    }
                 }
                 
                 // Place this inside the List, perhaps after "Environment"

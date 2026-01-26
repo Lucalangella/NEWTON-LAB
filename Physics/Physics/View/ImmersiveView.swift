@@ -9,6 +9,7 @@ struct ImmersiveView: View {
     @State private var objectEntity: ModelEntity?
     @State private var rootEntity: Entity?
     @State private var traceRoot: Entity?
+    @State private var wallsRoot: Entity?
     @State private var rampEntity: ModelEntity?
     @State private var floorEntity: ModelEntity?
     
@@ -24,6 +25,7 @@ struct ImmersiveView: View {
     // Logic State
     @State private var lastMarkerPosition: SIMD3<Float>? = nil
     @State private var initialDragPosition: SIMD3<Float>? = nil
+    @State private var initialScale: SIMD3<Float>? = nil
     
     var body: some View {
         RealityView { content in
@@ -61,6 +63,14 @@ struct ImmersiveView: View {
             floor.isEnabled = (appViewModel.selectedEnvironment == .virtual)
             root.addChild(floor)
             self.floorEntity = floor
+            
+            // --- WALLS ROOT ---
+            let walls = Entity()
+            walls.name = "WallsRoot"
+            root.addChild(walls)
+            self.wallsRoot = walls
+            
+            updateWalls()
             
             // ---------------------------------------------------------
             // SETUP RAMP
@@ -218,6 +228,25 @@ struct ImmersiveView: View {
                     }
                 }
         )
+        .gesture(
+            MagnifyGesture()
+                .targetedToAnyEntity()
+                .onChanged { value in
+                    let entity = value.entity
+                    if entity.name == "SceneMesh" || entity.name == "Fingertip" { return }
+                    
+                    if initialScale == nil {
+                        initialScale = entity.scale
+                    }
+                    
+                    guard let startScale = initialScale else { return }
+                    let magnification = Float(value.magnification)
+                    entity.scale = startScale * magnification
+                }
+                .onEnded { _ in
+                    initialScale = nil
+                }
+        )
         // --- EVENT HANDLERS ---
         .onChange(of: appViewModel.resetSignal) {
             guard let obj = objectEntity else { return }
@@ -254,6 +283,9 @@ struct ImmersiveView: View {
             guard let ramp = rampEntity else { return }
             let radians = appViewModel.rampRotation * (Float.pi / 180.0)
             ramp.transform.rotation = simd_quatf(angle: radians, axis: [0, 1, 0])
+        }
+        .onChange(of: [appViewModel.showWalls, appViewModel.wallHeight] as [AnyHashable]) {
+            updateWalls()
         }
     }
     
@@ -412,6 +444,60 @@ struct ImmersiveView: View {
             }
             ramp.isEnabled = (appViewModel.selectedEnvironment == .virtual && appViewModel.showRamp)
         }
+    }
+    
+    func updateWalls() {
+        guard let walls = wallsRoot else { return }
+        walls.children.removeAll()
+        
+        guard appViewModel.selectedEnvironment == .virtual, appViewModel.showWalls else { return }
+        
+        let wallHeight = appViewModel.wallHeight
+        let wallThickness: Float = 0.1
+        let floorSize: Float = 4.0
+        let floorCenterZ: Float = -2.0
+        
+        let wallMaterial = SimpleMaterial(color: .gray.withAlphaComponent(0.8), isMetallic: false)
+        
+        // Wall 1: Back (Z = -4.0)
+        let backWall = ModelEntity(
+            mesh: .generateBox(width: floorSize, height: wallHeight, depth: wallThickness),
+            materials: [wallMaterial]
+        )
+        backWall.position = [0, wallHeight / 2, floorCenterZ - (floorSize / 2) - (wallThickness / 2)]
+        backWall.generateCollisionShapes(recursive: false)
+        backWall.components.set(PhysicsBodyComponent(mode: .static))
+        walls.addChild(backWall)
+        
+        // Wall 2: Front (Z = 0.0)
+        let frontWall = ModelEntity(
+            mesh: .generateBox(width: floorSize, height: wallHeight, depth: wallThickness),
+            materials: [wallMaterial]
+        )
+        frontWall.position = [0, wallHeight / 2, floorCenterZ + (floorSize / 2) + (wallThickness / 2)]
+        frontWall.generateCollisionShapes(recursive: false)
+        frontWall.components.set(PhysicsBodyComponent(mode: .static))
+        walls.addChild(frontWall)
+        
+        // Wall 3: Left (X = -2.0)
+        let leftWall = ModelEntity(
+            mesh: .generateBox(width: wallThickness, height: wallHeight, depth: floorSize),
+            materials: [wallMaterial]
+        )
+        leftWall.position = [-(floorSize / 2) - (wallThickness / 2), wallHeight / 2, floorCenterZ]
+        leftWall.generateCollisionShapes(recursive: false)
+        leftWall.components.set(PhysicsBodyComponent(mode: .static))
+        walls.addChild(leftWall)
+        
+        // Wall 4: Right (X = 2.0)
+        let rightWall = ModelEntity(
+            mesh: .generateBox(width: wallThickness, height: wallHeight, depth: floorSize),
+            materials: [wallMaterial]
+        )
+        rightWall.position = [(floorSize / 2) + (wallThickness / 2), wallHeight / 2, floorCenterZ]
+        rightWall.generateCollisionShapes(recursive: false)
+        rightWall.components.set(PhysicsBodyComponent(mode: .static))
+        walls.addChild(rightWall)
     }
     
     private func addPathMarker(at position: SIMD3<Float>) {
