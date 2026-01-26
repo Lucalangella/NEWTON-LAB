@@ -16,7 +16,7 @@ struct PhysicsLabApp: App {
         // --- 1. SET STYLE TO AUTOMATIC (Standard Window) ---
         .windowStyle(.automatic)
         // --- 2. SET SIZE ---
-//        .defaultSize(width: 800, height: 500)
+        .defaultSize(width: 800, height: 500)
         
         // The Immersive Space (The room around you)
         ImmersiveSpace(id: "PhysicsSpace") {

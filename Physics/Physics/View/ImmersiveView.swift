@@ -156,14 +156,33 @@ struct ImmersiveView: View {
         } update: { content in }
         
         // --- 3. ARKIT TASKS ---
-        .task {
+        .task(id: appViewModel.selectedEnvironment) {
             if appViewModel.selectedEnvironment == .mixed {
-                await runARKitSession()
-            }
-        }
-        .task {
-            if appViewModel.selectedEnvironment == .mixed {
-                await processHandUpdates()
+                guard SceneReconstructionProvider.isSupported && HandTrackingProvider.isSupported else { return }
+                
+                do {
+                    try await session.run([sceneReconstruction, handTracking])
+                    
+                    await withTaskGroup(of: Void.self) { group in
+                        group.addTask {
+                            await processReconstructionUpdates()
+                        }
+                        group.addTask {
+                            await processHandUpdates()
+                        }
+                    }
+                } catch {
+                    print("ARKit Session failed: \(error)")
+                }
+            } else {
+                session.stop()
+                for entity in meshEntities.values {
+                    entity.removeFromParent()
+                }
+                meshEntities.removeAll()
+                for entity in fingerEntities.values {
+                    entity.isEnabled = false
+                }
             }
         }
         
@@ -292,39 +311,34 @@ struct ImmersiveView: View {
     // MARK: - ARKit Logic
     
     @MainActor
-    func runARKitSession() async {
-        guard SceneReconstructionProvider.isSupported && HandTrackingProvider.isSupported else { return }
-        
-        do {
-            try await session.run([sceneReconstruction, handTracking])
+    func processReconstructionUpdates() async {
+        for await update in sceneReconstruction.anchorUpdates {
+            let meshAnchor = update.anchor
             
-            for await update in sceneReconstruction.anchorUpdates {
-                let meshAnchor = update.anchor
+            guard let shape = try? await ShapeResource.generateStaticMesh(from: meshAnchor) else { continue }
+            
+            switch update.event {
+            case .added:
+                let entity = ModelEntity()
+                entity.name = "SceneMesh"
+                entity.transform = Transform(matrix: meshAnchor.originFromAnchorTransform)
+                entity.collision = CollisionComponent(shapes: [shape], isStatic: true)
+                entity.components.set(InputTargetComponent())
                 
-                guard let shape = try? await ShapeResource.generateStaticMesh(from: meshAnchor) else { continue }
+                entity.physicsBody = PhysicsBodyComponent(mode: .static)
                 
-                switch update.event {
-                case .added, .updated:
-                    if let entity = meshEntities[meshAnchor.id] {
-                        entity.transform = Transform(matrix: meshAnchor.originFromAnchorTransform)
-                        entity.collision?.shapes = [shape]
-                    } else {
-                        let entity = ModelEntity()
-                        entity.name = "SceneMesh"
-                        entity.transform = Transform(matrix: meshAnchor.originFromAnchorTransform)
-                        entity.collision = CollisionComponent(shapes: [shape], isStatic: true)
-                        entity.components.set(PhysicsBodyComponent(mode: .static))
-                        
-                        rootEntity?.addChild(entity)
-                        meshEntities[meshAnchor.id] = entity
-                    }
-                case .removed:
-                    meshEntities[meshAnchor.id]?.removeFromParent()
-                    meshEntities.removeValue(forKey: meshAnchor.id)
-                }
+                rootEntity?.addChild(entity)
+                meshEntities[meshAnchor.id] = entity
+                
+            case .updated:
+                guard let entity = meshEntities[meshAnchor.id] else { continue }
+                entity.transform = Transform(matrix: meshAnchor.originFromAnchorTransform)
+                entity.collision?.shapes = [shape]
+                
+            case .removed:
+                meshEntities[meshAnchor.id]?.removeFromParent()
+                meshEntities.removeValue(forKey: meshAnchor.id)
             }
-        } catch {
-            print("ARKit Session failed: \(error)")
         }
     }
     

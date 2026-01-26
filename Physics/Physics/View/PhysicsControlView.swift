@@ -185,7 +185,6 @@ struct PhysicsControlView: View {
             }
             .navigationTitle("Physics Lab")
         }
-        .frame(width: 500, height: 1000)
     }
 }
 
