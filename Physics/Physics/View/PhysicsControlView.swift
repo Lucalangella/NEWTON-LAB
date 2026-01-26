@@ -185,6 +185,7 @@ struct PhysicsControlView: View {
             }
             .navigationTitle("Physics Lab")
         }
+        .frame(width: 500, height: 1000)
     }
 }
 
@@ -232,4 +233,10 @@ struct DraggableMenuWrapper: View {
             .transform3DEffect(.init(translation: .init(x: 1000, y: -1000, z: -2500)))
     }
     .environment(AppViewModel())
+}
+
+#Preview(windowStyle: .automatic) {
+    PhysicsControlView()
+        .environment(AppViewModel())
+//        .frame(width: 800, height: 500)
 }

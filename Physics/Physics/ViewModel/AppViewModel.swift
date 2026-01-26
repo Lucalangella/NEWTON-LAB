@@ -17,7 +17,7 @@ class AppViewModel {
     
     // --- Environment ---
     var selectedEnvironment: PhysicsEnvironmentMode = .virtual
-    var showWalls: Bool = false
+    var showWalls: Bool = true
     var wallHeight: Float = 0.5
     
     // --- Live Data ---
@@ -63,7 +63,7 @@ class AppViewModel {
     func triggerReset() { resetSignal.toggle() }
     
     // NEW: Ramp Control
-    var showRamp: Bool = true
+    var showRamp: Bool = false
     var rampAngle: Float = 10.0 // Degrees
     var rampLength: Float = 4.0 // Meters
     var rampWidth: Float = 0.5 // Meters
