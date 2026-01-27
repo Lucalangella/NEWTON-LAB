@@ -27,6 +27,11 @@ struct ImmersiveView: View {
     @State private var initialDragPosition: SIMD3<Float>? = nil
     @State private var initialScale: SIMD3<Float>? = nil
     
+    // Velocity Tracking
+    @State private var currentDragVelocity: SIMD3<Float> = .zero
+    @State private var lastDragPosition: SIMD3<Float>? = nil
+    @State private var lastDragTime: TimeInterval = 0
+    
     var body: some View {
         RealityView { content in
             // --- 1. SETUP SCENE ---
@@ -211,6 +216,9 @@ struct ImmersiveView: View {
                     
                     if initialDragPosition == nil {
                         initialDragPosition = entity.position(relativeTo: entity.parent)
+                        // Reset velocity tracking on new drag
+                        lastDragPosition = nil
+                        currentDragVelocity = .zero
                     }
                     guard let startPos = initialDragPosition else { return }
                     
@@ -224,6 +232,21 @@ struct ImmersiveView: View {
                     let currentLocParent = value.convert(value.location3D, from: .local, to: entity.parent!)
                     let translation = currentLocParent - startLocParent
                     var newPos = startPos + translation
+                    
+                    // --- Velocity Calculation ---
+                    let currentTime = Date().timeIntervalSinceReferenceDate
+                    if let lastPos = lastDragPosition {
+                        let dt = Float(currentTime - lastDragTime)
+                        // Only update if time has passed to avoid divide by zero or noise
+                        if dt > 0.005 {
+                            let instantaneousVelocity = (newPos - lastPos) / dt
+                            // Simple exponential smoothing
+                            currentDragVelocity = (currentDragVelocity * 0.6) + (instantaneousVelocity * 0.4)
+                        }
+                    }
+                    lastDragPosition = newPos
+                    lastDragTime = currentTime
+                    // ----------------------------
                     
                     if entity.name == "Ramp" {
                         newPos.y = 0.0
@@ -253,11 +276,23 @@ struct ImmersiveView: View {
                         }
                         if appViewModel.selectedMode == .dynamic {
                             var motion = PhysicsMotionComponent()
-                            motion.linearVelocity = .zero
+                            
+                            // Check for staleness (held still)
+                            let timeSinceLastUpdate = Date().timeIntervalSinceReferenceDate - lastDragTime
+                            if timeSinceLastUpdate > 0.1 {
+                                motion.linearVelocity = .zero
+                            } else {
+                                motion.linearVelocity = currentDragVelocity
+                            }
+                            
                             motion.angularVelocity = .zero
                             entity.components.set(motion)
                         }
                     }
+                    
+                    // Reset tracking
+                    lastDragPosition = nil
+                    currentDragVelocity = .zero
                 }
         )
         .gesture(
