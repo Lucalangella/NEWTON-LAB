@@ -32,7 +32,7 @@ class AppViewModel {
     var selectedMode: PhysicsModeOption = .dynamic
     
     var mass: Float = 1.0
-    var gravity: Float = -9.8
+    var gravity: Float = -9.81
     var staticFriction: Float = 0.5
     var dynamicFriction: Float = 0.5
     var restitution: Float = 0.6
@@ -68,4 +68,19 @@ class AppViewModel {
     var rampLength: Float = 4.0 // Meters
     var rampWidth: Float = 0.5 // Meters
     var rampRotation: Float = 180.0 // Degrees (Yaw)
+    
+    // MARK: - Developer Tools
+    func printConfiguration() {
+        print("---------------------------------")
+        print("PHYSICS SETTINGS:")
+        print("Mass: \(mass)")
+        print("Gravity: \(gravity)")
+        print("Static Friction: \(staticFriction)")
+        print("Dynamic Friction: \(dynamicFriction)")
+        print("Restitution: \(restitution)")
+        print("Linear Damping: \(linearDamping)")
+        print("Air Density: \(airDensity)")
+        print("Shape: \(selectedShape.rawValue)")
+        print("---------------------------------")
+    }
 }

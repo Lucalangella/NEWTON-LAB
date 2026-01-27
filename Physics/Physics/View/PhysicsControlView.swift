@@ -81,9 +81,6 @@ struct PhysicsControlView: View {
                         
                         PhysicsSlider(label: "Height", value: $bVM.wallHeight, range: 0.1...2.0, unit: "m")
                     }
-//                    .padding()
-//                    .background(.white.opacity(0.05))
-//                    .cornerRadius(10)
                     .transition(.move(edge: .top).combined(with: .opacity)) // Smooth animation
                 }
 
@@ -92,29 +89,8 @@ struct PhysicsControlView: View {
                 
                 // Aerodynamics Section
                 VStack(alignment: .leading, spacing: 10) {
-//                    Toggle("Advanced Aerodynamics", isOn: $bVM.useAdvancedDrag)
-//                        .toggleStyle(.switch)
-//                    
-//                    if vm.useAdvancedDrag {
-                        PhysicsSlider(label: "Air Resistance", value: $bVM.airDensity, range: 0.0...5.0, unit: "kg/m³")
-                        
-//                        // Read-only info for advanced drag
-//                        HStack {
-//                            Text("Cd: \(vm.dragCoefficient, specifier: "%.2f")")
-//                            Spacer()
-//                            Text("Area: \(vm.crossSectionalArea, specifier: "%.3f") m²")
-//                        }
-//                        .font(.caption)
-//                        .foregroundStyle(.secondary)
-                        
-//                    }
-//                    else {
-//                        PhysicsSlider(label: "Linear damping", value: $bVM.linearDamping, range: 0.0...5.0, unit: "")
-//                    }
+                    PhysicsSlider(label: "Air Resistance", value: $bVM.airDensity, range: 0.0...5.0, unit: "kg/m³")
                 }
-//                .padding()
-//                .background(.white.opacity(0.05))
-//                .cornerRadius(10)
             }
             .frame(maxWidth: .infinity)
             .animation(.spring(), value: vm.showWalls) // Animate the layout change
@@ -126,31 +102,20 @@ struct PhysicsControlView: View {
                     .fill(.white.opacity(0.2))
                     .frame(width: 1)
                 RampSettingsPanel(vm: vm)
-                    /*.offset(x: 340)*/ // Position it to the right of the main board
             }
             
         }
         .padding(40)
-//        .glassBackgroundEffect()
         
         // --- Bottom Toolbar Ornament ---
         .ornament(attachmentAnchor: .scene(.bottom)) {
             DashboardToolbar(vm: vm)
         }
-        
-//        // --- Conditional Ramp Panel Overlay ---
-//        .overlay(alignment: .trailing) {
-//            if vm.showRamp {
-//                RampSettingsPanel(vm: vm)
-//                    .offset(x: 340) // Position it to the right of the main board
-//            }
-//        }
     }
 }
 
 // MARK: - Helper Components
 
-/// A custom slider that adapts RealityKit's `Float` to SwiftUI's `Double` requirements.
 struct PhysicsSlider: View {
     let label: String
     @Binding var value: Float
@@ -205,16 +170,25 @@ struct DashboardToolbar: View {
                     .padding(.vertical, 8)
             }
             
+            Button(action: { 
+                print("--- START CONSOLE LOG ---")
+                vm.printConfiguration() 
+                print("--- END CONSOLE LOG ---")
+            }) {
+                Label("Print Values", systemImage: "printer.fill")
+                    .padding(.vertical, 8)
+            }
+            
             Divider().frame(height: 20)
             
-            if vm.selectedEnvironment == .virtual{
+            if vm.selectedEnvironment == .virtual {
                 Toggle(isOn: $vm.showWalls) {
-                    Label("Walls", systemImage: "square.split.bottomright.fill")
+                    Label("Walls", systemImage: "square.dashed")
                 }
                 .toggleStyle(.button)
                 
                 Toggle(isOn: $vm.showRamp) {
-                    Label("Ramp", systemImage: "arrow.triangle.up.right")
+                    Label("Ramp", systemImage: "triangle.fill")
                 }
                 .toggleStyle(.button)
             }
@@ -241,13 +215,9 @@ struct RampSettingsPanel: View {
             PhysicsSlider(label: "Width", value: $vm.rampWidth, range: 0.5...5.0, unit: "m")
             PhysicsSlider(label: "Rotation", value: $vm.rampRotation, range: 0.0...360.0, unit: "°")
         }
-//        .padding(20)
-//        .frame(width: 300)
-//        .glassBackgroundEffect()
     }
 }
 
-// MARK: - Preview
 #Preview(windowStyle: .automatic) {
     PhysicsControlView()
         .environment(AppViewModel())
