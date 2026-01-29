@@ -1,8 +1,12 @@
-# PhysicsLabVisionOS
+# NewtonLab
+![NEWTONLAB-ezgif com-optimize](https://github.com/user-attachments/assets/f9573e8f-355b-4ed7-a193-b66abe096243)
+
 
 PhysicsLabVisionOS is a **VisionOS** application built with **SwiftUI** and **RealityKit**. It serves as an interactive physics laboratory where developers can experiment with various physical properties, simulate real-world behaviors in an immersive environment, and determine the optimal values for their own applications.
 
 The primary goal of this tool is to help you "feel" the physics (mass, friction, restitution, damping) and visualize the results (path tracing, velocity), so you can take those precise values and use them in your own RealityKit projects.
+
+[![Read on Medium](https://img.shields.io/badge/Medium-Story-black?logo=medium)](https://medium.com/@langellaluca00/stop-guessing-a-real-time-physics-lab-for-realitykit-developers-bf5e4d1b59c5)
 
 ## 🚀 Features
 
