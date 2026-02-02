@@ -14,6 +14,23 @@ class AppViewModel {
     // --- System States ---
     var immersiveSpaceState: ImmersiveSpaceState = .closed
     var resetSignal = false
+    var spawnSignal: ShapeOption? = nil
+    
+    // --- Selection Mode ---
+    var isSelectionMode: Bool = false
+    var selectedEntityIDs: Set<UInt64> = []
+    
+    func toggleSelection(_ id: UInt64) {
+        if selectedEntityIDs.contains(id) {
+            selectedEntityIDs.remove(id)
+        } else {
+            selectedEntityIDs.insert(id)
+        }
+    }
+    
+    func clearSelection() {
+        selectedEntityIDs.removeAll()
+    }
     
     // --- Environment ---
     var selectedEnvironment: PhysicsEnvironmentMode = .virtual

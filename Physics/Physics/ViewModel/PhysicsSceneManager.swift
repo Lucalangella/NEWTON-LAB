@@ -3,10 +3,11 @@ import RealityKit
 import ARKit
 
 @Observable
+@MainActor
 class PhysicsSceneManager {
     // MARK: - Scene Entities
     var rootEntity: Entity = Entity()
-    var objectEntity: ModelEntity?
+    var spawnedObjects: [ModelEntity] = []
     var traceRoot: Entity?
     var wallsRoot: Entity?
     var rampEntity: ModelEntity?
@@ -29,6 +30,10 @@ class PhysicsSceneManager {
     var currentDragVelocity: SIMD3<Float> = .zero
     var lastDragPosition: SIMD3<Float>? = nil
     var lastDragTime: TimeInterval = 0
+    var lastSpeedUpdateTime: TimeInterval = 0
+    
+    // Concurrency Guard
+    var isProcessingUpdate: Bool = false
     
     // Subscription
     var updateSubscription: EventSubscription?
@@ -88,13 +93,111 @@ class PhysicsSceneManager {
         self.rampEntity = ramp
         updateRamp(viewModel: viewModel)
         
-        // Object
+        // Initial Object
+        spawnShape(viewModel: viewModel, shape: viewModel.selectedShape)
+        
+        // Subscribe to updates
+        updateSubscription = content.subscribe(to: SceneEvents.Update.self) { [weak self] event in
+            Task { @MainActor in
+                guard let self = self else { return }
+                guard !self.isProcessingUpdate else { return }
+                self.isProcessingUpdate = true
+                self.handleSceneUpdate(viewModel: viewModel)
+                self.isProcessingUpdate = false
+            }
+        }
+    }
+    
+    // MARK: - Update Logic
+    func handleSceneUpdate(viewModel: AppViewModel) {
+        var totalSpeed: Float = 0
+        var activeCount: Int = 0
+        
+        for obj in spawnedObjects {
+            guard let motion = obj.components[PhysicsMotionComponent.self] else { continue }
+            
+            // Void Check
+            if obj.position(relativeTo: nil).y < -5.0 {
+                obj.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
+                obj.position = [0, 1.5, -2.0]
+                lastMarkerPosition = nil
+            }
+            
+            let velocity = motion.linearVelocity
+            let speed = length(velocity)
+            totalSpeed += speed
+            activeCount += 1
+            
+            // Advanced Drag
+            if viewModel.useAdvancedDrag {
+                if speed > 0.001 {
+                    let rho = viewModel.airDensity
+                    // We'd ideally need shape-specific data for each spawned object
+                    // For now using current VM values which might be slightly inaccurate for mixed shapes
+                    let A = viewModel.crossSectionalArea 
+                    let Cd = viewModel.dragCoefficient
+                    let dragMagnitude = 0.5 * rho * (speed * speed) * Cd * A
+                    let dragForce = -velocity / speed * dragMagnitude
+                    obj.addForce(dragForce, relativeTo: nil)
+                }
+            }
+            
+            // Path Trace (only for the last spawned or focused? Let's do all for now if enabled)
+            if viewModel.showPath {
+                let currentPos = obj.position(relativeTo: nil)
+                if let lastPos = lastMarkerPosition {
+                    if length(currentPos - lastPos) > 0.05 {
+                        addPathMarker(at: currentPos)
+                        lastMarkerPosition = currentPos
+                    }
+                } else {
+                    lastMarkerPosition = currentPos
+                }
+            }
+        }
+        
+        let avgSpeed = activeCount > 0 ? totalSpeed / Float(activeCount) : 0
+        let currentTime = Date().timeIntervalSinceReferenceDate
+        
+        if currentTime - lastSpeedUpdateTime > 0.1 {
+            if abs(viewModel.currentSpeed - avgSpeed) > 0.01 {
+                 viewModel.currentSpeed = avgSpeed
+            }
+            lastSpeedUpdateTime = currentTime
+        }
+        
+        // Gravity Update
+        if var physSim = rootEntity.components[PhysicsSimulationComponent.self] {
+            physSim.gravity = [0, viewModel.gravity, 0]
+            rootEntity.components.set(physSim)
+        }
+    }
+    
+    func spawnShape(viewModel: AppViewModel, shape: ShapeOption) {
         let object = ModelEntity()
         object.name = "PhysicsObject"
         object.position = [0, 1.5, -2.0]
         object.components.set(InputTargetComponent(allowedInputTypes: .all))
         
-        let material = PhysicsMaterialResource.generate(
+        let mesh: MeshResource
+        let materialColor: SimpleMaterial.Color
+        
+        switch shape {
+        case .box:
+            mesh = .generateBox(size: 0.3)
+            materialColor = .red
+        case .sphere:
+            mesh = .generateSphere(radius: 0.15)
+            materialColor = .blue
+        case .cylinder:
+            mesh = .generateCylinder(height: 0.3, radius: 0.15)
+            materialColor = .green
+        }
+        
+        object.model = ModelComponent(mesh: mesh, materials: [SimpleMaterial(color: materialColor, isMetallic: false)])
+        object.generateCollisionShapes(recursive: false)
+        
+        let physMaterial = PhysicsMaterialResource.generate(
             staticFriction: viewModel.staticFriction,
             dynamicFriction: viewModel.dynamicFriction,
             restitution: viewModel.restitution
@@ -103,82 +206,20 @@ class PhysicsSceneManager {
         let initialMode: PhysicsBodyMode = (viewModel.selectedEnvironment == .mixed) ? .kinematic : viewModel.selectedMode.rkMode
         var physicsBody = PhysicsBodyComponent(
             massProperties: .init(mass: viewModel.mass),
-            material: material,
+            material: physMaterial,
             mode: initialMode
         )
         physicsBody.linearDamping = viewModel.linearDamping
         object.components.set(physicsBody)
         
         rootEntity.addChild(object)
-        self.objectEntity = object
-        updateShape(viewModel: viewModel)
-        
-        // Subscribe to updates
-        updateSubscription = content.subscribe(to: SceneEvents.Update.self) { [weak self] event in
-            self?.handleSceneUpdate(viewModel: viewModel)
-        }
+        spawnedObjects.append(object)
     }
-    
-    // MARK: - Update Logic
-    func handleSceneUpdate(viewModel: AppViewModel) {
-        guard let obj = objectEntity,
-              let motion = obj.components[PhysicsMotionComponent.self] else { return }
-        
-        // Void Check
-        if obj.position(relativeTo: nil).y < -5.0 {
-            obj.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
-            obj.position = [0, 1.5, -2.0]
-            lastMarkerPosition = nil
-        }
-        
-        let velocity = motion.linearVelocity
-        let speed = length(velocity)
-        
-        // Update ViewModel (Dispatch to main thread if needed, but @Observable handles it usually)
-        // Since this is high frequency, we should be careful. 
-        // For now, updating directly. If stutter occurs, throttle this.
-        if abs(viewModel.currentSpeed - speed) > 0.01 {
-             DispatchQueue.main.async {
-                 viewModel.currentSpeed = speed
-             }
-        }
-        
-        // Advanced Drag
-        if viewModel.useAdvancedDrag {
-            if speed > 0.001 {
-                let rho = viewModel.airDensity
-                let A = viewModel.crossSectionalArea
-                let Cd = viewModel.dragCoefficient
-                let dragMagnitude = 0.5 * rho * (speed * speed) * Cd * A
-                let dragForce = -velocity / speed * dragMagnitude
-                obj.addForce(dragForce, relativeTo: nil)
-            }
-        }
-        
-        // Gravity Update
-        if var physSim = rootEntity.components[PhysicsSimulationComponent.self] {
-            physSim.gravity = [0, viewModel.gravity, 0]
-            rootEntity.components.set(physSim)
-        }
-        
-        // Path Trace
-        if viewModel.showPath {
-            let currentPos = obj.position(relativeTo: nil)
-            if let lastPos = lastMarkerPosition {
-                if length(currentPos - lastPos) > 0.05 {
-                    addPathMarker(at: currentPos)
-                    lastMarkerPosition = currentPos
-                }
-            } else {
-                lastMarkerPosition = currentPos
-            }
-        }
-    }
-    
+
     // MARK: - Gestures
     func handleDragChanged(value: EntityTargetValue<DragGesture.Value>, viewModel: AppViewModel) {
         let entity = value.entity
-        if entity.name == "SceneMesh" || entity.name == "Fingertip" { return }
+        if entity.name == "SceneMesh" || entity.name == "Fingertip" || entity.name == "Root" { return }
         
         viewModel.isDragging = true
         
@@ -224,7 +265,7 @@ class PhysicsSceneManager {
     
     func handleDragEnded(value: EntityTargetValue<DragGesture.Value>, viewModel: AppViewModel) {
         let entity = value.entity
-        if entity.name == "SceneMesh" || entity.name == "Fingertip" { return }
+        if entity.name == "SceneMesh" || entity.name == "Fingertip" || entity.name == "Root" { return }
         
         viewModel.isDragging = false
         initialDragPosition = nil
@@ -260,7 +301,7 @@ class PhysicsSceneManager {
     
     func handleMagnifyChanged(value: EntityTargetValue<MagnifyGesture.Value>) {
         let entity = value.entity
-        if entity.name == "SceneMesh" || entity.name == "Fingertip" { return }
+        if entity.name == "SceneMesh" || entity.name == "Fingertip" || entity.name == "Root" || entity.name == "TraceRoot" || entity.name == "WallsRoot" { return }
         
         if initialScale == nil {
             initialScale = entity.scale
@@ -275,54 +316,118 @@ class PhysicsSceneManager {
         initialScale = nil
     }
     
+    // MARK: - Selection
+    func handleTap(value: EntityTargetValue<SpatialTapGesture.Value>, viewModel: AppViewModel) {
+        guard viewModel.isSelectionMode else { return }
+        
+        let entity = value.entity
+        // Check if entity is one of our spawned objects (or a child of one)
+        // For simplicity, we attach the gesture to the object itself, so 'entity' should be it.
+        // But we must verify it's not the floor/wall.
+        
+        if spawnedObjects.contains(where: { $0.id == entity.id }) {
+            viewModel.toggleSelection(entity.id)
+            updateSelectionVisuals(viewModel: viewModel)
+            syncViewModelToSelection(viewModel: viewModel)
+        }
+    }
+    
+    func updateSelectionVisuals(viewModel: AppViewModel) {
+        for obj in spawnedObjects {
+            // Check for existing highlight
+            let highlightName = "SelectionHighlight"
+            let existingHighlight = obj.findEntity(named: highlightName)
+            
+            if viewModel.selectedEntityIDs.contains(obj.id) {
+                // Add highlight if missing
+                if existingHighlight == nil {
+                    let mesh = MeshResource.generateBox(size: 0.35) // Slightly larger than standard box
+                    // Adjust size based on shape? For prototype, fixed box or dynamic bounding box.
+                    // Let's just use a simple white wireframe-ish effect via material or opacity.
+                    // Simplest: Add a slightly larger semi-transparent shell.
+                    let material = UnlitMaterial(color: .white.withAlphaComponent(0.3))
+                    let highlight = ModelEntity(mesh: mesh, materials: [material])
+                    highlight.name = highlightName
+                    highlight.components.set(OpacityComponent(opacity: 0.3))
+                    obj.addChild(highlight)
+                }
+            } else {
+                // Remove highlight if present
+                if let highlight = existingHighlight {
+                    highlight.removeFromParent()
+                }
+            }
+        }
+    }
+    
+    func syncViewModelToSelection(viewModel: AppViewModel) {
+        // If one object selected, update VM values to match it.
+        // If multiple, maybe don't sync (keep current VM values).
+        // If none, keep current.
+        
+        guard viewModel.selectedEntityIDs.count == 1,
+              let id = viewModel.selectedEntityIDs.first,
+              let obj = spawnedObjects.first(where: { $0.id == id }) else { return }
+        
+        if let body = obj.components[PhysicsBodyComponent.self] {
+            viewModel.mass = body.massProperties.mass
+            // Material properties are harder to extract perfectly back to VM's separated friction/restitution
+            // without storing them. But we can try to get them if available.
+            // RK's PhysicsMaterialResource doesn't expose properties easily.
+            // Strategy: We rely on the VM being the source of truth for the *next* edit.
+            // So we might NOT sync back perfectly for now to avoid complexity, 
+            // OR we assume standard values.
+            // Ideally, we should store a metadata component on the entity with these values.
+        }
+    }
+    
     // MARK: - Scene Modifiers
     func resetScene() {
-        guard let obj = objectEntity else { return }
-        obj.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
-        obj.position = [0, 1.5, -2.0]
+        for obj in spawnedObjects {
+            obj.removeFromParent()
+        }
+        spawnedObjects.removeAll()
         traceRoot?.children.removeAll()
         lastMarkerPosition = nil
     }
     
     func updateShape(viewModel: AppViewModel) {
-        guard let obj = objectEntity else { return }
-        let newMesh: MeshResource
-        let newMaterial: SimpleMaterial
-        
-        switch viewModel.selectedShape {
-        case .box:
-            newMesh = .generateBox(size: 0.3)
-            newMaterial = SimpleMaterial(color: .red, isMetallic: false)
-        case .sphere:
-            newMesh = .generateSphere(radius: 0.15)
-            newMaterial = SimpleMaterial(color: .blue, isMetallic: false)
-        case .cylinder:
-            newMesh = .generateCylinder(height: 0.3, radius: 0.15)
-            newMaterial = SimpleMaterial(color: .green, isMetallic: false)
-        }
-        
-        obj.model = ModelComponent(mesh: newMesh, materials: [newMaterial])
-        obj.generateCollisionShapes(recursive: false)
+        // No longer using single shape update for all objects, but could if needed.
+        // For now, new objects are spawned with the selected shape.
     }
     
     func updatePhysicsProperties(viewModel: AppViewModel) {
-        guard let obj = objectEntity else { return }
-        
         let newMaterial = PhysicsMaterialResource.generate(
             staticFriction: viewModel.staticFriction,
             dynamicFriction: viewModel.dynamicFriction,
             restitution: viewModel.restitution
         )
         
-        var bodyComponent = obj.components[PhysicsBodyComponent.self] ?? PhysicsBodyComponent()
-        bodyComponent.massProperties.mass = viewModel.mass
-        bodyComponent.material = newMaterial
-        bodyComponent.mode = viewModel.selectedMode.rkMode
-        bodyComponent.linearDamping = viewModel.useAdvancedDrag ? 0.0 : viewModel.linearDamping
+        let targets: [ModelEntity]
+        if viewModel.selectedEntityIDs.isEmpty {
+            targets = spawnedObjects
+        } else {
+            targets = spawnedObjects.filter { viewModel.selectedEntityIDs.contains($0.id) }
+        }
         
-        obj.components.set(bodyComponent)
+        for obj in targets {
+            var bodyComponent = obj.components[PhysicsBodyComponent.self] ?? PhysicsBodyComponent()
+            bodyComponent.massProperties.mass = viewModel.mass
+            bodyComponent.material = newMaterial
+            bodyComponent.mode = viewModel.selectedMode.rkMode
+            bodyComponent.linearDamping = viewModel.useAdvancedDrag ? 0.0 : viewModel.linearDamping
+            
+            obj.components.set(bodyComponent)
+        }
     }
     
+    func updateEnvironment(viewModel: AppViewModel) {
+        floorEntity?.isEnabled = (viewModel.selectedEnvironment == .virtual)
+        rampEntity?.isEnabled = (viewModel.selectedEnvironment == .virtual && viewModel.showRamp)
+        updateWalls(viewModel: viewModel)
+        updatePhysicsProperties(viewModel: viewModel)
+    }
+
     func updateRamp(viewModel: AppViewModel) {
         guard let ramp = rampEntity else { return }
         

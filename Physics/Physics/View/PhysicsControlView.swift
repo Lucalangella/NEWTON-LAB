@@ -13,18 +13,30 @@ struct PhysicsControlView: View {
             
             // --- Column 1: Object Properties (Internal Physics) ---
             VStack(alignment: .leading, spacing: 20) {
-                SectionHeader(title: "Object Properties", icon: "cube.fill")
+                SectionHeader(title: "Add Objects", icon: "plus.circle.fill")
                 
-                // Shape Picker
-                Picker("Shape", selection: $bVM.selectedShape) {
+                // Shape Buttons
+                HStack(spacing: 15) {
                     ForEach(ShapeOption.allCases) { shape in
-                        Text(shape.rawValue).tag(shape)
+                        Button(action: { vm.spawnSignal = shape }) {
+                            VStack {
+                                Image(systemName: shapeIcon(for: shape))
+                                    .font(.title2)
+                                Text(shape.rawValue)
+                                    .font(.caption2)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(shapeSecondaryColor(for: shape))
                     }
                 }
-                .pickerStyle(.segmented)
                 
                 Divider()
                     .background(.white.opacity(0.2))
+                
+                SectionHeader(title: "Physics Properties", icon: "cube.fill")
                 
                 // Physics Sliders (Mass, Bounce, Friction)
                 Group {
@@ -45,6 +57,15 @@ struct PhysicsControlView: View {
             VStack(alignment: .leading, spacing: 20) {
                 SectionHeader(title: "Environment", icon: "globe.europe.africa.fill")
                 
+                // Selection Mode Toggle
+                Toggle(isOn: $bVM.isSelectionMode) {
+                    Label(bVM.isSelectionMode ? "Selection Mode ON" : "Enable Selection", systemImage: bVM.isSelectionMode ? "cursorarrow.click.2" : "cursorarrow")
+                        .font(.headline)
+                }
+                .toggleStyle(.button)
+                .tint(bVM.isSelectionMode ? .yellow : .secondary)
+                .padding(.bottom, 5)
+
                 // Telemetry Readout Box
                 HStack {
                     VStack(alignment: .leading) {
@@ -72,7 +93,7 @@ struct PhysicsControlView: View {
                 .cornerRadius(12)
                 
                 // --- NEW: Wall Settings (Appears only when Walls are ON) ---
-                if vm.showWalls {
+                if vm.selectedEnvironment == .virtual && vm.showWalls {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Wall Configuration")
                             .font(.caption)
@@ -96,7 +117,7 @@ struct PhysicsControlView: View {
             .animation(.spring(), value: vm.showWalls) // Animate the layout change
             
             
-            if vm.showRamp {
+            if vm.selectedEnvironment == .virtual && vm.showRamp {
                 // Vertical Divider
                 Rectangle()
                     .fill(.white.opacity(0.2))
@@ -215,6 +236,23 @@ struct RampSettingsPanel: View {
             PhysicsSlider(label: "Width", value: $vm.rampWidth, range: 0.5...5.0, unit: "m")
             PhysicsSlider(label: "Rotation", value: $vm.rampRotation, range: 0.0...360.0, unit: "°")
         }
+    }
+}
+
+// MARK: - Shape Helpers
+func shapeIcon(for shape: ShapeOption) -> String {
+    switch shape {
+    case .box: return "cube"
+    case .sphere: return "circle.fill"
+    case .cylinder: return "capsule.fill"
+    }
+}
+
+func shapeSecondaryColor(for shape: ShapeOption) -> Color {
+    switch shape {
+    case .box: return .red
+    case .sphere: return .blue
+    case .cylinder: return .green
     }
 }
 

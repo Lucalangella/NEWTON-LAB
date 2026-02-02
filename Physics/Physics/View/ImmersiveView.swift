@@ -64,9 +64,25 @@ struct ImmersiveView: View {
                     sceneManager.handleMagnifyEnded()
                 }
         )
+        .gesture(
+            SpatialTapGesture()
+                .targetedToAnyEntity()
+                .onEnded { value in
+                    sceneManager.handleTap(value: value, viewModel: appViewModel)
+                }
+        )
         // --- Event Listeners ---
         .onChange(of: appViewModel.resetSignal) {
             sceneManager.resetScene()
+        }
+        .onChange(of: appViewModel.isSelectionMode) { _, newValue in
+            print("Selection Mode Changed: \(newValue)")
+            if !newValue {
+                appViewModel.clearSelection()
+                Task {
+                    sceneManager.updateSelectionVisuals(viewModel: appViewModel)
+                }
+            }
         }
         .onChange(of: [appViewModel.mass, appViewModel.restitution, appViewModel.dynamicFriction, appViewModel.staticFriction, appViewModel.linearDamping, appViewModel.airDensity] as [Float]) {
             sceneManager.updatePhysicsProperties(viewModel: appViewModel)
@@ -83,8 +99,14 @@ struct ImmersiveView: View {
                 sceneManager.lastMarkerPosition = nil
             }
         }
-        .onChange(of: appViewModel.selectedShape) {
-            sceneManager.updateShape(viewModel: appViewModel)
+        .onChange(of: appViewModel.spawnSignal) {
+            if let shape = appViewModel.spawnSignal {
+                sceneManager.spawnShape(viewModel: appViewModel, shape: shape)
+                appViewModel.spawnSignal = nil // Reset signal
+            }
+        }
+        .onChange(of: appViewModel.selectedEnvironment) {
+            sceneManager.updateEnvironment(viewModel: appViewModel)
         }
         .onChange(of: appViewModel.showRamp) {
             sceneManager.rampEntity?.isEnabled = (appViewModel.selectedEnvironment == .virtual && appViewModel.showRamp)
