@@ -61,17 +61,15 @@ struct PhysicsControlView: View {
                 HStack {
                     // Selection Mode Toggle
                     Toggle(isOn: $bVM.isSelectionMode) {
-                        Label("Select", systemImage: bVM.isSelectionMode ? "cursorarrow.click.2" : "cursorarrow")
+                        Label("Select", systemImage: "cursorarrow")
                     }
                     .toggleStyle(.button)
-                    .tint(bVM.isSelectionMode ? .yellow : .secondary)
-                    
+
                     // Delete Mode Toggle
                     Toggle(isOn: $bVM.isDeleteMode) {
                         Label("Delete", systemImage: "trash")
                     }
                     .toggleStyle(.button)
-                    .tint(bVM.isDeleteMode ? .red : .secondary)
                 }
                 .padding(.bottom, 5)
 
