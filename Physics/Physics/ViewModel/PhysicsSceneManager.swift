@@ -318,18 +318,32 @@ class PhysicsSceneManager {
     
     // MARK: - Selection
     func handleTap(value: EntityTargetValue<SpatialTapGesture.Value>, viewModel: AppViewModel) {
+        let entity = value.entity
+        
+        // Check if entity is one of our spawned objects (or a child of one)
+        // Find the root object in our spawnedObjects list
+        guard let objectIndex = spawnedObjects.firstIndex(where: { $0.id == entity.id }) else { return }
+        let object = spawnedObjects[objectIndex]
+        
+        if viewModel.isDeleteMode {
+            // Delete Logic
+            object.removeFromParent()
+            spawnedObjects.remove(at: objectIndex)
+            
+            // Also cleanup selection if it was selected
+            if viewModel.selectedEntityIDs.contains(object.id) {
+                viewModel.selectedEntityIDs.remove(object.id)
+                // No need to update visuals for this object as it's gone, 
+                // but might need to sync VM if it was the only selection.
+            }
+            return
+        }
+        
         guard viewModel.isSelectionMode else { return }
         
-        let entity = value.entity
-        // Check if entity is one of our spawned objects (or a child of one)
-        // For simplicity, we attach the gesture to the object itself, so 'entity' should be it.
-        // But we must verify it's not the floor/wall.
-        
-        if spawnedObjects.contains(where: { $0.id == entity.id }) {
-            viewModel.toggleSelection(entity.id)
-            updateSelectionVisuals(viewModel: viewModel)
-            syncViewModelToSelection(viewModel: viewModel)
-        }
+        viewModel.toggleSelection(object.id)
+        updateSelectionVisuals(viewModel: viewModel)
+        syncViewModelToSelection(viewModel: viewModel)
     }
     
     func updateSelectionVisuals(viewModel: AppViewModel) {

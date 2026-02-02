@@ -57,13 +57,22 @@ struct PhysicsControlView: View {
             VStack(alignment: .leading, spacing: 20) {
                 SectionHeader(title: "Environment", icon: "globe.europe.africa.fill")
                 
-                // Selection Mode Toggle
-                Toggle(isOn: $bVM.isSelectionMode) {
-                    Label(bVM.isSelectionMode ? "Selection Mode ON" : "Enable Selection", systemImage: bVM.isSelectionMode ? "cursorarrow.click.2" : "cursorarrow")
-                        .font(.headline)
+                // Tools
+                HStack {
+                    // Selection Mode Toggle
+                    Toggle(isOn: $bVM.isSelectionMode) {
+                        Label("Select", systemImage: bVM.isSelectionMode ? "cursorarrow.click.2" : "cursorarrow")
+                    }
+                    .toggleStyle(.button)
+                    .tint(bVM.isSelectionMode ? .yellow : .secondary)
+                    
+                    // Delete Mode Toggle
+                    Toggle(isOn: $bVM.isDeleteMode) {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .toggleStyle(.button)
+                    .tint(bVM.isDeleteMode ? .red : .secondary)
                 }
-                .toggleStyle(.button)
-                .tint(bVM.isSelectionMode ? .yellow : .secondary)
                 .padding(.bottom, 5)
 
                 // Telemetry Readout Box
