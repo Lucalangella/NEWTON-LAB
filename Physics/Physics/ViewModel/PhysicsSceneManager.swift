@@ -12,6 +12,8 @@ class PhysicsSceneManager {
     var wallsRoot: Entity?
     var rampEntity: ModelEntity?
     var floorEntity: ModelEntity?
+    var sunEntity: ModelEntity?
+    var mainSunLight: DirectionalLight?
     
     // MARK: - ARKit
     var session = ARKitSession()
@@ -51,7 +53,9 @@ class PhysicsSceneManager {
         let keyLight = DirectionalLight()
         keyLight.light.intensity = 800
         keyLight.look(at: [0, 0, -2], from: [2, 4, 2], relativeTo: nil)
+        keyLight.isEnabled = viewModel.showSun
         rootEntity.addChild(keyLight)
+        self.mainSunLight = keyLight
         
         // 2. Fill Light (Softens Shadows)
         let fillLight = DirectionalLight()
@@ -60,6 +64,9 @@ class PhysicsSceneManager {
         rootEntity.addChild(fillLight)
         
         content.add(rootEntity)
+        
+        // Ensure Sun is initialized if needed
+        updateSunVisibility(viewModel: viewModel)
         
         // Traces
         let traces = Entity()
@@ -77,7 +84,7 @@ class PhysicsSceneManager {
         // Virtual Floor
         let floor = ModelEntity(
             mesh: .generatePlane(width: 4.0, depth: 4.0),
-            materials: [SimpleMaterial(color: .gray.withAlphaComponent(0.5), isMetallic: false)]
+            materials: [SimpleMaterial(color: .white.withAlphaComponent(CGFloat(viewModel.environmentOpacity)), isMetallic: false)]
         )
         floor.position = [0, 0, -2.0]
         floor.generateCollisionShapes(recursive: false)
@@ -122,8 +129,87 @@ class PhysicsSceneManager {
         }
     }
     
+    func updateSunVisibility(viewModel: AppViewModel) {
+        if viewModel.showSun {
+            if sunEntity == nil {
+                spawnSun(viewModel: viewModel)
+            }
+            sunEntity?.isEnabled = true
+            mainSunLight?.isEnabled = true
+            updateSunProperties(viewModel: viewModel)
+        } else {
+            sunEntity?.isEnabled = false
+            mainSunLight?.isEnabled = false
+        }
+    }
+    
+    func updateSunProperties(viewModel: AppViewModel) {
+        guard let light = mainSunLight else { return }
+        // Update Light Intensity
+        light.light.intensity = viewModel.sunIntensity
+    }
+    
+    func updateEnvironmentOpacity(viewModel: AppViewModel) {
+        let opacity = viewModel.environmentOpacity
+        let color = SimpleMaterial.Color.white.withAlphaComponent(CGFloat(opacity))
+        let material = SimpleMaterial(color: color, isMetallic: false)
+        
+        // Update Floor
+        floorEntity?.model?.materials = [material]
+        
+        // Update Walls (recursive update for all children in wallsRoot)
+        func updateMaterials(in entity: Entity) {
+            if var model = entity.components[ModelComponent.self] {
+                model.materials = [material]
+                entity.components.set(model)
+            }
+            for child in entity.children {
+                updateMaterials(in: child)
+            }
+        }
+        
+        if let walls = wallsRoot {
+            updateMaterials(in: walls)
+        }
+    }
+
+    private func spawnSun(viewModel: AppViewModel) {
+        // Remove existing if any (safety)
+        if let existing = sunEntity {
+            existing.removeFromParent()
+        }
+        
+        let sun: ModelEntity
+        if let loadedModel = try? ModelEntity.loadModel(named: "Sun") {
+            sun = loadedModel
+        } else {
+            // Fallback to sphere if USDZ fails
+            sun = ModelEntity(
+                mesh: .generateSphere(radius: 0.15),
+                materials: [UnlitMaterial(color: .yellow)]
+            )
+        }
+        
+        sun.name = "Sun"
+        sun.position = [0.5, 1.5, -1.0]
+        
+        // Physics for dragging
+        sun.components.set(PhysicsBodyComponent(mode: .kinematic))
+        sun.components.set(InputTargetComponent(allowedInputTypes: .all))
+        sun.generateCollisionShapes(recursive: true)
+        
+        rootEntity.addChild(sun)
+        self.sunEntity = sun
+    }
+
     // MARK: - Update Logic
     func handleSceneUpdate(viewModel: AppViewModel) {
+        // Update Sun Light Direction
+        if let sun = sunEntity, let light = mainSunLight {
+            // Light points from Sun to Origin (or Center of Scene roughly [0, 0, -2])
+            light.look(at: [0, 0, -2], from: sun.position, relativeTo: nil)
+        }
+        
         var totalSpeed: Float = 0
         var activeCount: Int = 0
         
@@ -195,8 +281,8 @@ class PhysicsSceneManager {
             if let loadedModel = try? ModelEntity.loadModel(named: "Pin") {
                 object = loadedModel
                 // Generate Convex Hull from the actual mesh for accurate inertia/collision
-                if let mesh = findFirstMesh(in: object),
-                   let convex = try? ShapeResource.generateConvex(from: mesh) {
+                if let mesh = findFirstMesh(in: object) {
+                    let convex = ShapeResource.generateConvex(from: mesh)
                     collisionShape = convex
                 } else {
                     object.generateCollisionShapes(recursive: true)
@@ -222,7 +308,7 @@ class PhysicsSceneManager {
             case .cylinder:
                 mesh = .generateCylinder(height: 0.3, radius: 0.15)
                 materialColor = .green
-                collisionShape = try? ShapeResource.generateConvex(from: mesh)
+                collisionShape = ShapeResource.generateConvex(from: mesh)
             case .pin: return
             }
             
@@ -339,6 +425,12 @@ class PhysicsSceneManager {
             if var body = entity.components[PhysicsBodyComponent.self] {
                 body.mode = .static
                 entity.components.set(body)
+            }
+        } else if entity.name == "Sun" {
+            if var body = entity.components[PhysicsBodyComponent.self] {
+                body.mode = .kinematic
+                entity.components.set(body)
+                entity.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
             }
         } else {
             if var body = entity.components[PhysicsBodyComponent.self] {
@@ -466,6 +558,8 @@ class PhysicsSceneManager {
             obj.removeFromParent()
         }
         spawnedObjects.removeAll()
+        sunEntity?.removeFromParent()
+        sunEntity = nil
         traceRoot?.children.removeAll()
         lastMarkerPosition = nil
     }
@@ -544,11 +638,9 @@ class PhysicsSceneManager {
                 mesh: rampMesh,
                 materials: [SimpleMaterial(color: .cyan.withAlphaComponent(0.8), isMetallic: false)]
             )
-            if let shape = try? ShapeResource.generateConvex(from: rampMesh) {
-                ramp.collision = CollisionComponent(shapes: [shape])
-            } else {
-                ramp.generateCollisionShapes(recursive: false)
-            }
+            let shape = ShapeResource.generateConvex(from: rampMesh)
+            ramp.collision = CollisionComponent(shapes: [shape])
+            
             if ramp.components[PhysicsBodyComponent.self] == nil {
                 ramp.components.set(PhysicsBodyComponent(mode: .static))
             }
@@ -566,7 +658,7 @@ class PhysicsSceneManager {
         let wallThickness: Float = 0.1
         let floorSize: Float = 4.0
         let floorCenterZ: Float = -2.0
-        let wallMaterial = SimpleMaterial(color: .gray.withAlphaComponent(0.8), isMetallic: false)
+        let wallMaterial = SimpleMaterial(color: .white.withAlphaComponent(CGFloat(viewModel.environmentOpacity)), isMetallic: false)
         
         // Wall Helpers
         func createWall(size: SIMD3<Float>, pos: SIMD3<Float>) {

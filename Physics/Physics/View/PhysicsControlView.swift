@@ -100,6 +100,25 @@ struct PhysicsControlView: View {
                 .background(.black.opacity(0.2))
                 .cornerRadius(12)
                 
+                // Sun Toggle
+                Toggle(isOn: $bVM.showSun) {
+                    Label("Sun Light", systemImage: "sun.max.fill")
+                }
+                .toggleStyle(.button)
+                
+                if vm.showSun {
+                    VStack(alignment: .leading, spacing: 10) {
+                        PhysicsSlider(label: "Sun Intensity", value: $bVM.sunIntensity, range: 0.0...3000.0, unit: "lx")
+                    }
+                    .padding(.vertical, 5)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                
+                // Environment Opacity
+                if vm.selectedEnvironment == .virtual {
+                    PhysicsSlider(label: "Env Opacity", value: $bVM.environmentOpacity, range: 0.0...1.0, unit: "%")
+                }
+                
                 // --- NEW: Wall Settings (Appears only when Walls are ON) ---
                 if vm.selectedEnvironment == .virtual && vm.showWalls {
                     VStack(alignment: .leading, spacing: 10) {
