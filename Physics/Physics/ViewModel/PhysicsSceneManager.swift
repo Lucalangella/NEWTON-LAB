@@ -189,11 +189,18 @@ class PhysicsSceneManager {
     
     func spawnShape(viewModel: AppViewModel, shape: ShapeOption) {
         let object: ModelEntity
+        var collisionShape: ShapeResource?
         
         if shape == .pin {
             if let loadedModel = try? ModelEntity.loadModel(named: "Pin") {
                 object = loadedModel
-                object.generateCollisionShapes(recursive: true)
+                // Generate Convex Hull from the actual mesh for accurate inertia/collision
+                if let mesh = findFirstMesh(in: object),
+                   let convex = try? ShapeResource.generateConvex(from: mesh) {
+                    collisionShape = convex
+                } else {
+                    object.generateCollisionShapes(recursive: true)
+                }
             } else {
                 print("Failed to load Pin.usdz")
                 return
@@ -207,25 +214,27 @@ class PhysicsSceneManager {
             case .box:
                 mesh = .generateBox(size: 0.3)
                 materialColor = .red
-                object.collision = CollisionComponent(shapes: [.generateBox(size: [0.3, 0.3, 0.3])])
+                collisionShape = .generateBox(size: [0.3, 0.3, 0.3])
             case .sphere:
                 mesh = .generateSphere(radius: 0.15)
                 materialColor = .blue
-                object.collision = CollisionComponent(shapes: [.generateSphere(radius: 0.15)])
+                collisionShape = .generateSphere(radius: 0.15)
             case .cylinder:
                 mesh = .generateCylinder(height: 0.3, radius: 0.15)
                 materialColor = .green
-                if let shape = try? ShapeResource.generateConvex(from: mesh) {
-                    object.collision = CollisionComponent(shapes: [shape])
-                } else {
-                    // Fallback to box if convex generation fails
-                    object.generateCollisionShapes(recursive: false)
-                }
-            case .pin:
-                return
+                collisionShape = try? ShapeResource.generateConvex(from: mesh)
+            case .pin: return
             }
             
             object.model = ModelComponent(mesh: mesh, materials: [SimpleMaterial(color: materialColor, isMetallic: false)])
+            
+            if collisionShape == nil {
+                object.generateCollisionShapes(recursive: false)
+            }
+        }
+        
+        if let shapeRes = collisionShape {
+            object.collision = CollisionComponent(shapes: [shapeRes])
         }
         
         object.name = "PhysicsObject"
@@ -238,9 +247,26 @@ class PhysicsSceneManager {
             restitution: viewModel.restitution
         )
         
+        // Calculate Mass Properties from Shape (Crucial for correct Inertia)
+        var massProps: PhysicsMassProperties
+        if let shapeRes = collisionShape {
+            massProps = PhysicsMassProperties(shape: shapeRes, mass: viewModel.mass)
+        } else {
+             massProps = .init(mass: viewModel.mass)
+        }
+        
+        // Pin Stability Fix
+        if shape == .pin {
+            let bounds = object.visualBounds(relativeTo: object)
+            let height = bounds.max.y - bounds.min.y
+            // Raise CoM to 85% of height
+            let targetY = bounds.min.y + (height * 0.85)
+            massProps.centerOfMass = (position: [0, targetY, 0], orientation: simd_quatf(angle: 0, axis: [0, 1, 0]))
+        }
+        
         let initialMode: PhysicsBodyMode = (viewModel.selectedEnvironment == .mixed) ? .kinematic : viewModel.selectedMode.rkMode
         var physicsBody = PhysicsBodyComponent(
-            massProperties: .init(mass: viewModel.mass),
+            massProperties: massProps,
             material: physMaterial,
             mode: initialMode
         )
@@ -629,5 +655,17 @@ class PhysicsSceneManager {
         entity.components.set(OpacityComponent(opacity: 0.0))
         entity.isEnabled = false
         return entity
+    }
+    
+    private func findFirstMesh(in entity: Entity) -> MeshResource? {
+        if let model = entity.components[ModelComponent.self]?.mesh {
+            return model
+        }
+        for child in entity.children {
+            if let found = findFirstMesh(in: child) {
+                return found
+            }
+        }
+        return nil
     }
 }
