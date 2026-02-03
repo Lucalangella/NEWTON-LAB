@@ -373,8 +373,7 @@ class PhysicsSceneManager {
             lastDragPosition = nil
             currentDragVelocity = .zero
             
-            // Force upright orientation on pick up
-            entity.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
+
         }
         guard let startPos = initialDragPosition else { return }
         
@@ -409,8 +408,6 @@ class PhysicsSceneManager {
             if newPos.y < minHeight { newPos.y = minHeight }
             entity.position = newPos
             
-            // Strictly enforce upright orientation during drag
-            entity.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
         }
     }
     
