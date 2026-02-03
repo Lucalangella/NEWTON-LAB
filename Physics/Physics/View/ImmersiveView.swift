@@ -90,6 +90,12 @@ struct SceneEventsModifier: ViewModifier {
                     appViewModel.spawnSignal = nil
                 }
             }
+            .onChange(of: appViewModel.spawnCustomModelSignal) {
+                if let url = appViewModel.spawnCustomModelSignal {
+                    sceneManager.spawnCustomModel(url: url, viewModel: appViewModel)
+                    appViewModel.spawnCustomModelSignal = nil
+                }
+            }
             .onChange(of: appViewModel.showSun) {
                 sceneManager.updateSunVisibility(viewModel: appViewModel)
             }

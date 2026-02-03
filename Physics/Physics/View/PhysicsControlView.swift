@@ -1,5 +1,6 @@
 import SwiftUI
 import RealityKit
+import UniformTypeIdentifiers
 
 // MARK: - Main Control View
 struct PhysicsControlView: View {
@@ -31,6 +32,20 @@ struct PhysicsControlView: View {
                         .buttonStyle(.bordered)
                         .tint(shapeSecondaryColor(for: shape))
                     }
+                    
+                    // Import Custom Model Button
+                    Button(action: { vm.showFileImporter = true }) {
+                        VStack {
+                            Image(systemName: "square.and.arrow.down.fill")
+                                .font(.title2)
+                            Text("Import")
+                                .font(.caption2)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.purple)
                 }
                 
                 Divider()
@@ -158,6 +173,20 @@ struct PhysicsControlView: View {
         .ornament(attachmentAnchor: .scene(.bottom)) {
             DashboardToolbar(vm: vm)
         }
+        .fileImporter(
+            isPresented: $bVM.showFileImporter,
+            allowedContentTypes: [UTType(filenameExtension: "usdz")!],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    vm.spawnCustomModelSignal = url
+                }
+            case .failure(let error):
+                print("Error picking file: \(error.localizedDescription)")
+            }
+        }
     }
 }
 
@@ -271,7 +300,7 @@ func shapeIcon(for shape: ShapeOption) -> String {
     case .box: return "cube"
     case .sphere: return "circle.fill"
     case .cylinder: return "capsule.fill"
-    case .pin: return "mappin.and.ellipse"
+    case .cone: return "cone.fill"
     }
 }
 
@@ -280,7 +309,7 @@ func shapeSecondaryColor(for shape: ShapeOption) -> Color {
     case .box: return .red
     case .sphere: return .blue
     case .cylinder: return .green
-    case .pin: return .orange
+    case .cone: return .yellow
     }
 }
 

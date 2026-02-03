@@ -277,41 +277,32 @@ class PhysicsSceneManager {
         let object: ModelEntity
         var collisionShape: ShapeResource?
         
-        if shape == .pin {
-            if let loadedModel = try? ModelEntity.loadModel(named: "Pin") {
-                object = loadedModel
-               // Automatically generates correct shape matching the visuals
-                        object.generateCollisionShapes(recursive: true)
-            } else {
-                print("Failed to load Pin.usdz")
-                return
-            }
-        } else {
-            object = ModelEntity()
-            let mesh: MeshResource
-            let materialColor: SimpleMaterial.Color
-            
-            switch shape {
-            case .box:
-                mesh = .generateBox(size: 0.3)
-                materialColor = .red
-                collisionShape = .generateBox(size: [0.3, 0.3, 0.3])
-            case .sphere:
-                mesh = .generateSphere(radius: 0.15)
-                materialColor = .blue
-                collisionShape = .generateSphere(radius: 0.15)
-            case .cylinder:
-                mesh = .generateCylinder(height: 0.3, radius: 0.15)
-                materialColor = .green
-                collisionShape = ShapeResource.generateConvex(from: mesh)
-            case .pin: return
-            }
-            
-            object.model = ModelComponent(mesh: mesh, materials: [SimpleMaterial(color: materialColor, isMetallic: false)])
-            
-            if collisionShape == nil {
-                object.generateCollisionShapes(recursive: false)
-            }
+        object = ModelEntity()
+        let mesh: MeshResource
+        let materialColor: SimpleMaterial.Color
+        
+        switch shape {
+        case .box:
+            mesh = .generateBox(size: 0.3)
+            materialColor = .red
+            collisionShape = .generateBox(size: [0.3, 0.3, 0.3])
+        case .sphere:
+            mesh = .generateSphere(radius: 0.15)
+            materialColor = .blue
+            collisionShape = .generateSphere(radius: 0.15)
+                    case .cylinder:
+                        mesh = .generateCylinder(height: 0.3, radius: 0.15)
+                        materialColor = .green
+                        collisionShape = ShapeResource.generateConvex(from: mesh)
+                    case .cone:
+                        mesh = .generateCone(height: 0.3, radius: 0.15)
+                        materialColor = .yellow
+                        collisionShape = ShapeResource.generateConvex(from: mesh)
+                    }        
+        object.model = ModelComponent(mesh: mesh, materials: [SimpleMaterial(color: materialColor, isMetallic: false)])
+        
+        if collisionShape == nil {
+            object.generateCollisionShapes(recursive: false)
         }
         
         if let shapeRes = collisionShape {
@@ -351,6 +342,49 @@ class PhysicsSceneManager {
         
         rootEntity.addChild(object)
         spawnedObjects.append(object)
+    }
+    
+    func spawnCustomModel(url: URL, viewModel: AppViewModel) {
+        guard url.startAccessingSecurityScopedResource() else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
+        
+        do {
+            let object = try ModelEntity.loadModel(contentsOf: url)
+            object.name = "PhysicsObject"
+            object.position = [0, 1.5, -2.0]
+            object.components.set(InputTargetComponent(allowedInputTypes: .all))
+            
+            // Generate collisions for custom model
+            object.generateCollisionShapes(recursive: true)
+            
+            let physMaterial = PhysicsMaterialResource.generate(
+                staticFriction: viewModel.staticFriction,
+                dynamicFriction: viewModel.dynamicFriction,
+                restitution: viewModel.restitution
+            )
+            
+            // Try to create mass properties from the generated collision shapes
+            var massProps: PhysicsMassProperties
+            if let shape = object.collision?.shapes.first {
+                massProps = PhysicsMassProperties(shape: shape, mass: viewModel.mass)
+            } else {
+                massProps = .init(mass: viewModel.mass)
+            }
+            
+            let initialMode: PhysicsBodyMode = (viewModel.selectedEnvironment == .mixed) ? .kinematic : viewModel.selectedMode.rkMode
+            var physicsBody = PhysicsBodyComponent(
+                massProperties: massProps,
+                material: physMaterial,
+                mode: initialMode
+            )
+            physicsBody.linearDamping = viewModel.linearDamping
+            object.components.set(physicsBody)
+            
+            rootEntity.addChild(object)
+            spawnedObjects.append(object)
+        } catch {
+            print("Failed to load custom model: \(error)")
+        }
     }
 
     // MARK: - Gestures

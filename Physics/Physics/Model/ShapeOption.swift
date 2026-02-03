@@ -4,7 +4,7 @@ enum ShapeOption: String, CaseIterable, Identifiable {
     case box = "Cube"
     case sphere = "Sphere"
     case cylinder = "Cylinder"
-    case pin = "Pin"
+    case cone = "Cone"
     
     var id: String { self.rawValue }
 }
