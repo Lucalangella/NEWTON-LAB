@@ -207,19 +207,25 @@ class PhysicsSceneManager {
             case .box:
                 mesh = .generateBox(size: 0.3)
                 materialColor = .red
+                object.collision = CollisionComponent(shapes: [.generateBox(size: [0.3, 0.3, 0.3])])
             case .sphere:
                 mesh = .generateSphere(radius: 0.15)
                 materialColor = .blue
+                object.collision = CollisionComponent(shapes: [.generateSphere(radius: 0.15)])
             case .cylinder:
                 mesh = .generateCylinder(height: 0.3, radius: 0.15)
                 materialColor = .green
+                if let shape = try? ShapeResource.generateConvex(from: mesh) {
+                    object.collision = CollisionComponent(shapes: [shape])
+                } else {
+                    // Fallback to box if convex generation fails
+                    object.generateCollisionShapes(recursive: false)
+                }
             case .pin:
-                // Should not happen due to if-check above, but needed for switch exhaustiveness if not carefully structured
                 return
             }
             
             object.model = ModelComponent(mesh: mesh, materials: [SimpleMaterial(color: materialColor, isMetallic: false)])
-            object.generateCollisionShapes(recursive: false)
         }
         
         object.name = "PhysicsObject"
