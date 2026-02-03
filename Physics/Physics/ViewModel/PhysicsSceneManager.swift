@@ -280,13 +280,8 @@ class PhysicsSceneManager {
         if shape == .pin {
             if let loadedModel = try? ModelEntity.loadModel(named: "Pin") {
                 object = loadedModel
-                // Generate Convex Hull from the actual mesh for accurate inertia/collision
-                if let mesh = findFirstMesh(in: object) {
-                    let convex = ShapeResource.generateConvex(from: mesh)
-                    collisionShape = convex
-                } else {
-                    object.generateCollisionShapes(recursive: true)
-                }
+               // Automatically generates correct shape matching the visuals
+                        object.generateCollisionShapes(recursive: true)
             } else {
                 print("Failed to load Pin.usdz")
                 return
@@ -337,8 +332,11 @@ class PhysicsSceneManager {
         var massProps: PhysicsMassProperties
         if let shapeRes = collisionShape {
             massProps = PhysicsMassProperties(shape: shapeRes, mass: viewModel.mass)
+        } else if let generatedShape = object.collision?.shapes.first {
+            // Fallback: Grab the shape we just auto-generated
+            massProps = PhysicsMassProperties(shape: generatedShape, mass: viewModel.mass)
         } else {
-             massProps = .init(mass: viewModel.mass)
+            massProps = .init(mass: viewModel.mass)
         }
         
         // Apply Center of Mass adjustment (Generic for all shapes)
