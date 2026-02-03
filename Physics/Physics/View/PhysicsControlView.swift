@@ -44,6 +44,7 @@ struct PhysicsControlView: View {
                     PhysicsSlider(label: "Bounciness", value: $bVM.restitution, range: 0.0...1.0, unit: "")
                     PhysicsSlider(label: "Static Friction", value: $bVM.staticFriction, range: 0.0...1.0, unit: "")
                     PhysicsSlider(label: "Dynamic Friction", value: $bVM.dynamicFriction, range: 0.0...1.0, unit: "")
+                    PhysicsSlider(label: "Center of Mass", value: $bVM.centerOfMassFactor, range: 0.0...1.0, unit: "%")
                 }
             }
             .frame(maxWidth: .infinity)

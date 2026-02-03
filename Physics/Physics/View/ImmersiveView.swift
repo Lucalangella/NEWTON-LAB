@@ -84,7 +84,7 @@ struct ImmersiveView: View {
                 }
             }
         }
-        .onChange(of: [appViewModel.mass, appViewModel.restitution, appViewModel.dynamicFriction, appViewModel.staticFriction, appViewModel.linearDamping, appViewModel.airDensity] as [Float]) {
+        .onChange(of: [appViewModel.mass, appViewModel.restitution, appViewModel.dynamicFriction, appViewModel.staticFriction, appViewModel.linearDamping, appViewModel.airDensity, appViewModel.centerOfMassFactor] as [Float]) {
             sceneManager.updatePhysicsProperties(viewModel: appViewModel)
         }
         .onChange(of: appViewModel.useAdvancedDrag) {

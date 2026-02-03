@@ -255,14 +255,12 @@ class PhysicsSceneManager {
              massProps = .init(mass: viewModel.mass)
         }
         
-        // Pin Stability Fix
-        if shape == .pin {
-            let bounds = object.visualBounds(relativeTo: object)
-            let height = bounds.max.y - bounds.min.y
-            // Raise CoM to 85% of height
-            let targetY = bounds.min.y + (height * 0.85)
-            massProps.centerOfMass = (position: [0, targetY, 0], orientation: simd_quatf(angle: 0, axis: [0, 1, 0]))
-        }
+        // Apply Center of Mass adjustment (Generic for all shapes)
+        // Uses visual bounds to determine height range
+        let bounds = object.visualBounds(relativeTo: object)
+        let height = bounds.max.y - bounds.min.y
+        let targetY = bounds.min.y + (height * viewModel.centerOfMassFactor)
+        massProps.centerOfMass = (position: [0, targetY, 0], orientation: simd_quatf(angle: 0, axis: [0, 1, 0]))
         
         let initialMode: PhysicsBodyMode = (viewModel.selectedEnvironment == .mixed) ? .kinematic : viewModel.selectedMode.rkMode
         var physicsBody = PhysicsBodyComponent(
@@ -288,6 +286,9 @@ class PhysicsSceneManager {
             initialDragPosition = entity.position(relativeTo: entity.parent)
             lastDragPosition = nil
             currentDragVelocity = .zero
+            
+            // Force upright orientation on pick up
+            entity.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
         }
         guard let startPos = initialDragPosition else { return }
         
@@ -321,6 +322,9 @@ class PhysicsSceneManager {
             let minHeight: Float = (viewModel.selectedEnvironment == .virtual) ? 0.16 : -1.0
             if newPos.y < minHeight { newPos.y = minHeight }
             entity.position = newPos
+            
+            // Strictly enforce upright orientation during drag
+            entity.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
         }
     }
     
@@ -491,6 +495,12 @@ class PhysicsSceneManager {
             bodyComponent.material = newMaterial
             bodyComponent.mode = viewModel.selectedMode.rkMode
             bodyComponent.linearDamping = viewModel.useAdvancedDrag ? 0.0 : viewModel.linearDamping
+            
+            // Update Center of Mass
+            let bounds = obj.visualBounds(relativeTo: obj)
+            let height = bounds.max.y - bounds.min.y
+            let targetY = bounds.min.y + (height * viewModel.centerOfMassFactor)
+            bodyComponent.massProperties.centerOfMass = (position: [0, targetY, 0], orientation: simd_quatf(angle: 0, axis: [0, 1, 0]))
             
             obj.components.set(bodyComponent)
         }
