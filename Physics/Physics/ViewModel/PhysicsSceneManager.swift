@@ -339,12 +339,6 @@ class PhysicsSceneManager {
             massProps = .init(mass: viewModel.mass)
         }
         
-        // Apply Center of Mass adjustment (Generic for all shapes)
-        // Uses visual bounds to determine height range
-        let bounds = object.visualBounds(relativeTo: object)
-        let height = bounds.max.y - bounds.min.y
-        let targetY = bounds.min.y + (height * viewModel.centerOfMassFactor)
-        massProps.centerOfMass = (position: [0, targetY, 0], orientation: simd_quatf(angle: 0, axis: [0, 1, 0]))
         
         let initialMode: PhysicsBodyMode = (viewModel.selectedEnvironment == .mixed) ? .kinematic : viewModel.selectedMode.rkMode
         var physicsBody = PhysicsBodyComponent(
@@ -584,12 +578,6 @@ class PhysicsSceneManager {
             bodyComponent.material = newMaterial
             bodyComponent.mode = viewModel.selectedMode.rkMode
             bodyComponent.linearDamping = viewModel.useAdvancedDrag ? 0.0 : viewModel.linearDamping
-            
-            // Update Center of Mass
-            let bounds = obj.visualBounds(relativeTo: obj)
-            let height = bounds.max.y - bounds.min.y
-            let targetY = bounds.min.y + (height * viewModel.centerOfMassFactor)
-            bodyComponent.massProperties.centerOfMass = (position: [0, targetY, 0], orientation: simd_quatf(angle: 0, axis: [0, 1, 0]))
             
             obj.components.set(bodyComponent)
         }

@@ -111,7 +111,7 @@ struct PhysicsPropertiesModifier: ViewModifier {
     
     func body(content: Content) -> some View {
         content
-            .onChange(of: [appViewModel.mass, appViewModel.restitution, appViewModel.dynamicFriction, appViewModel.staticFriction, appViewModel.linearDamping, appViewModel.airDensity, appViewModel.centerOfMassFactor, appViewModel.environmentOpacity] as [Float]) {
+            .onChange(of: [appViewModel.mass, appViewModel.restitution, appViewModel.dynamicFriction, appViewModel.staticFriction, appViewModel.linearDamping, appViewModel.airDensity, appViewModel.environmentOpacity] as [Float]) {
                 sceneManager.updatePhysicsProperties(viewModel: appViewModel)
                 sceneManager.updateEnvironmentOpacity(viewModel: appViewModel)
             }

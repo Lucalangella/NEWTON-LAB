@@ -62,7 +62,6 @@ class AppViewModel {
     var dynamicFriction: Float = 0.5
     var restitution: Float = 0.6
     var linearDamping: Float = 0.1
-    var centerOfMassFactor: Float = 0.5 // 0.0 = Bottom, 1.0 = Top
     
     // NEW: Advanced Aerodynamics
     var useAdvancedDrag: Bool = false
