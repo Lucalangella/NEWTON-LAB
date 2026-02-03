@@ -70,6 +70,7 @@ class AppViewModel {
         case .box: return 1.05 // Cube flat face
         case .sphere: return 0.47
         case .cylinder: return 0.82 // Approx for long cylinder side-on
+        case .pin: return 0.5
         }
     }
     
@@ -79,6 +80,7 @@ class AppViewModel {
         case .box: return 0.3 * 0.3 // 0.09 m^2
         case .sphere: return Float.pi * pow(0.15, 2) // ~0.07 m^2
         case .cylinder: return 0.3 * 0.15 * 2 // Approx projected area (h*d) = 0.09 m^2
+        case .pin: return 0.07
         }
     }
     

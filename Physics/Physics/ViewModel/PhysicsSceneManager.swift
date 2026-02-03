@@ -45,6 +45,20 @@ class PhysicsSceneManager {
         var physSim = PhysicsSimulationComponent()
         physSim.gravity = [0, -9.8, 0]
         rootEntity.components.set(physSim)
+        
+        // Studio Lighting Setup
+        // 1. Key Light (Main Source)
+        let keyLight = DirectionalLight()
+        keyLight.light.intensity = 800
+        keyLight.look(at: [0, 0, -2], from: [2, 4, 2], relativeTo: nil)
+        rootEntity.addChild(keyLight)
+        
+        // 2. Fill Light (Softens Shadows)
+        let fillLight = DirectionalLight()
+        fillLight.light.intensity = 600
+        fillLight.look(at: [0, 0, -2], from: [-2, 2, 0], relativeTo: nil)
+        rootEntity.addChild(fillLight)
+        
         content.add(rootEntity)
         
         // Traces
@@ -174,28 +188,43 @@ class PhysicsSceneManager {
     }
     
     func spawnShape(viewModel: AppViewModel, shape: ShapeOption) {
-        let object = ModelEntity()
+        let object: ModelEntity
+        
+        if shape == .pin {
+            if let loadedModel = try? ModelEntity.loadModel(named: "Pin") {
+                object = loadedModel
+                object.generateCollisionShapes(recursive: true)
+            } else {
+                print("Failed to load Pin.usdz")
+                return
+            }
+        } else {
+            object = ModelEntity()
+            let mesh: MeshResource
+            let materialColor: SimpleMaterial.Color
+            
+            switch shape {
+            case .box:
+                mesh = .generateBox(size: 0.3)
+                materialColor = .red
+            case .sphere:
+                mesh = .generateSphere(radius: 0.15)
+                materialColor = .blue
+            case .cylinder:
+                mesh = .generateCylinder(height: 0.3, radius: 0.15)
+                materialColor = .green
+            case .pin:
+                // Should not happen due to if-check above, but needed for switch exhaustiveness if not carefully structured
+                return
+            }
+            
+            object.model = ModelComponent(mesh: mesh, materials: [SimpleMaterial(color: materialColor, isMetallic: false)])
+            object.generateCollisionShapes(recursive: false)
+        }
+        
         object.name = "PhysicsObject"
         object.position = [0, 1.5, -2.0]
         object.components.set(InputTargetComponent(allowedInputTypes: .all))
-        
-        let mesh: MeshResource
-        let materialColor: SimpleMaterial.Color
-        
-        switch shape {
-        case .box:
-            mesh = .generateBox(size: 0.3)
-            materialColor = .red
-        case .sphere:
-            mesh = .generateSphere(radius: 0.15)
-            materialColor = .blue
-        case .cylinder:
-            mesh = .generateCylinder(height: 0.3, radius: 0.15)
-            materialColor = .green
-        }
-        
-        object.model = ModelComponent(mesh: mesh, materials: [SimpleMaterial(color: materialColor, isMetallic: false)])
-        object.generateCollisionShapes(recursive: false)
         
         let physMaterial = PhysicsMaterialResource.generate(
             staticFriction: viewModel.staticFriction,

@@ -252,6 +252,7 @@ func shapeIcon(for shape: ShapeOption) -> String {
     case .box: return "cube"
     case .sphere: return "circle.fill"
     case .cylinder: return "capsule.fill"
+    case .pin: return "mappin.and.ellipse"
     }
 }
 
@@ -260,6 +261,7 @@ func shapeSecondaryColor(for shape: ShapeOption) -> Color {
     case .box: return .red
     case .sphere: return .blue
     case .cylinder: return .green
+    case .pin: return .orange
     }
 }
 
