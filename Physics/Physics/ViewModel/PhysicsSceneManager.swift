@@ -27,6 +27,7 @@ class PhysicsSceneManager {
     var lastMarkerPosition: SIMD3<Float>? = nil
     var initialDragPosition: SIMD3<Float>? = nil
     var initialScale: SIMD3<Float>? = nil
+    var initialRotation: simd_quatf? = nil
     
     // Velocity Tracking
     var currentDragVelocity: SIMD3<Float> = .zero
@@ -127,6 +128,18 @@ class PhysicsSceneManager {
                 self.isProcessingUpdate = false
             }
         }
+    }
+    
+    private func findTargetEntity(for entity: Entity) -> Entity? {
+        // Walk up the hierarchy to find the root interactable entity
+        var current: Entity? = entity
+        while let c = current {
+            if c.name == "PhysicsObject" || c.name == "Sun" || c.name == "Ramp" {
+                return c
+            }
+            current = c.parent
+        }
+        return nil
     }
     
     func updateSunVisibility(viewModel: AppViewModel) {
@@ -310,7 +323,14 @@ class PhysicsSceneManager {
         }
         
         object.name = "PhysicsObject"
-        object.position = [0, 1.5, -2.0]
+        
+        let randomOffset = SIMD3<Float>(
+            Float.random(in: -0.2...0.2),
+            0,
+            Float.random(in: -0.2...0.2)
+        )
+        object.position = [0, 1.5, -2.0] + randomOffset
+        
         object.components.set(InputTargetComponent(allowedInputTypes: .all))
         
         let physMaterial = PhysicsMaterialResource.generate(
@@ -321,15 +341,19 @@ class PhysicsSceneManager {
         
         // Calculate Mass Properties from Shape (Crucial for correct Inertia)
         var massProps: PhysicsMassProperties
+        let bounds = object.visualBounds(relativeTo: object)
+        let geometricCenter = (bounds.max + bounds.min) / 2
+        
         if let shapeRes = collisionShape {
             massProps = PhysicsMassProperties(shape: shapeRes, mass: viewModel.mass)
         } else if let generatedShape = object.collision?.shapes.first {
-            // Fallback: Grab the shape we just auto-generated
             massProps = PhysicsMassProperties(shape: generatedShape, mass: viewModel.mass)
         } else {
             massProps = .init(mass: viewModel.mass)
         }
         
+        // Force Center of Mass to geometric center to prevent "wobbling back"
+        massProps.centerOfMass.position = geometricCenter
         
         let initialMode: PhysicsBodyMode = (viewModel.selectedEnvironment == .mixed) ? .kinematic : viewModel.selectedMode.rkMode
         var physicsBody = PhysicsBodyComponent(
@@ -338,6 +362,7 @@ class PhysicsSceneManager {
             mode: initialMode
         )
         physicsBody.linearDamping = viewModel.linearDamping
+        physicsBody.angularDamping = 0.5 // Add damping to reduce wobbling
         object.components.set(physicsBody)
         
         rootEntity.addChild(object)
@@ -351,7 +376,14 @@ class PhysicsSceneManager {
         do {
             let object = try ModelEntity.loadModel(contentsOf: url)
             object.name = "PhysicsObject"
-            object.position = [0, 1.5, -2.0]
+            
+            let randomOffset = SIMD3<Float>(
+                Float.random(in: -0.2...0.2),
+                0,
+                Float.random(in: -0.2...0.2)
+            )
+            object.position = [0, 1.5, -2.0] + randomOffset
+            
             object.components.set(InputTargetComponent(allowedInputTypes: .all))
             
             // Generate collisions for custom model
@@ -365,11 +397,17 @@ class PhysicsSceneManager {
             
             // Try to create mass properties from the generated collision shapes
             var massProps: PhysicsMassProperties
+            let bounds = object.visualBounds(relativeTo: object)
+            let geometricCenter = (bounds.max + bounds.min) / 2
+            
             if let shape = object.collision?.shapes.first {
                 massProps = PhysicsMassProperties(shape: shape, mass: viewModel.mass)
             } else {
                 massProps = .init(mass: viewModel.mass)
             }
+            
+            // Force Center of Mass to geometric center
+            massProps.centerOfMass.position = geometricCenter
             
             let initialMode: PhysicsBodyMode = (viewModel.selectedEnvironment == .mixed) ? .kinematic : viewModel.selectedMode.rkMode
             var physicsBody = PhysicsBodyComponent(
@@ -378,6 +416,7 @@ class PhysicsSceneManager {
                 mode: initialMode
             )
             physicsBody.linearDamping = viewModel.linearDamping
+            physicsBody.angularDamping = 0.5
             object.components.set(physicsBody)
             
             rootEntity.addChild(object)
@@ -389,8 +428,7 @@ class PhysicsSceneManager {
 
     // MARK: - Gestures
     func handleDragChanged(value: EntityTargetValue<DragGesture.Value>, viewModel: AppViewModel) {
-        let entity = value.entity
-        if entity.name == "SceneMesh" || entity.name == "Fingertip" || entity.name == "Root" { return }
+        guard let entity = findTargetEntity(for: value.entity) else { return }
         
         viewModel.isDragging = true
         
@@ -438,11 +476,79 @@ class PhysicsSceneManager {
     }
     
     func handleDragEnded(value: EntityTargetValue<DragGesture.Value>, viewModel: AppViewModel) {
-        let entity = value.entity
-        if entity.name == "SceneMesh" || entity.name == "Fingertip" || entity.name == "Root" { return }
+        guard let entity = findTargetEntity(for: value.entity) else { return }
         
         viewModel.isDragging = false
         initialDragPosition = nil
+        
+        endInteractionIfNeeded(entity: entity, viewModel: viewModel)
+        
+        lastDragPosition = nil
+        currentDragVelocity = .zero
+    }
+    
+    func handleMagnifyChanged(value: EntityTargetValue<MagnifyGesture.Value>) {
+        guard let entity = findTargetEntity(for: value.entity) else { return }
+        if entity.name == "TraceRoot" || entity.name == "WallsRoot" { return }
+        
+        // Ensure kinematic during interaction
+        if var body = entity.components[PhysicsBodyComponent.self], body.mode != .kinematic {
+            body.mode = .kinematic
+            entity.components.set(body)
+            entity.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
+        }
+        
+        if initialScale == nil {
+            initialScale = entity.scale
+        }
+        
+        guard let startScale = initialScale else { return }
+        let magnification = Float(value.magnification)
+        entity.scale = startScale * magnification
+    }
+    
+    func handleMagnifyEnded(value: EntityTargetValue<MagnifyGesture.Value>, viewModel: AppViewModel) {
+        guard let entity = findTargetEntity(for: value.entity) else { return }
+        initialScale = nil
+        endInteractionIfNeeded(entity: entity, viewModel: viewModel)
+    }
+    
+    func handleRotateChanged(value: EntityTargetValue<RotateGesture3D.Value>) {
+        guard let entity = findTargetEntity(for: value.entity) else { return }
+        if entity.name == "TraceRoot" || entity.name == "WallsRoot" { return }
+        
+        // Ensure kinematic during interaction
+        if var body = entity.components[PhysicsBodyComponent.self], body.mode != .kinematic {
+            body.mode = .kinematic
+            entity.components.set(body)
+            entity.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
+        }
+        
+        if initialRotation == nil {
+            initialRotation = entity.orientation
+        }
+        
+        guard let startRotation = initialRotation else { return }
+        
+        // Convert Rotation3D to simd_quatf
+        let rotation = value.rotation
+        let rotationQuat = simd_quatf(rotation)
+        
+        // Apply rotation relative to the start rotation
+        entity.orientation = rotationQuat * startRotation
+    }
+    
+    func handleRotateEnded(value: EntityTargetValue<RotateGesture3D.Value>, viewModel: AppViewModel) {
+        guard let entity = findTargetEntity(for: value.entity) else { return }
+        initialRotation = nil
+        endInteractionIfNeeded(entity: entity, viewModel: viewModel)
+    }
+    
+    private func endInteractionIfNeeded(entity: Entity, viewModel: AppViewModel) {
+        // Only return to dynamic/static if no other gestures are active for this entity
+        // Note: This is a bit simplified as we don't track per-entity gesture state perfectly here,
+        // but since we only have one set of initialX variables, it works for single-object interaction.
+        guard initialDragPosition == nil && initialScale == nil && initialRotation == nil else { return }
         
         if entity.name == "Ramp" {
             if var body = entity.components[PhysicsBodyComponent.self] {
@@ -474,35 +580,14 @@ class PhysicsSceneManager {
                 entity.components.set(motion)
             }
         }
-        
-        lastDragPosition = nil
-        currentDragVelocity = .zero
-    }
-    
-    func handleMagnifyChanged(value: EntityTargetValue<MagnifyGesture.Value>) {
-        let entity = value.entity
-        if entity.name == "SceneMesh" || entity.name == "Fingertip" || entity.name == "Root" || entity.name == "TraceRoot" || entity.name == "WallsRoot" { return }
-        
-        if initialScale == nil {
-            initialScale = entity.scale
-        }
-        
-        guard let startScale = initialScale else { return }
-        let magnification = Float(value.magnification)
-        entity.scale = startScale * magnification
-    }
-    
-    func handleMagnifyEnded() {
-        initialScale = nil
     }
     
     // MARK: - Selection
     func handleTap(value: EntityTargetValue<SpatialTapGesture.Value>, viewModel: AppViewModel) {
-        let entity = value.entity
+        guard let objectEntity = findTargetEntity(for: value.entity) as? ModelEntity else { return }
         
-        // Check if entity is one of our spawned objects (or a child of one)
         // Find the root object in our spawnedObjects list
-        guard let objectIndex = spawnedObjects.firstIndex(where: { $0.id == entity.id }) else { return }
+        guard let objectIndex = spawnedObjects.firstIndex(where: { $0.id == objectEntity.id }) else { return }
         let object = spawnedObjects[objectIndex]
         
         if viewModel.isDeleteMode {
@@ -535,13 +620,14 @@ class PhysicsSceneManager {
             if viewModel.selectedEntityIDs.contains(obj.id) {
                 // Add highlight if missing
                 if existingHighlight == nil {
-                    let mesh = MeshResource.generateBox(size: 0.35) // Slightly larger than standard box
-                    // Adjust size based on shape? For prototype, fixed box or dynamic bounding box.
-                    // Let's just use a simple white wireframe-ish effect via material or opacity.
-                    // Simplest: Add a slightly larger semi-transparent shell.
+                    let bounds = obj.visualBounds(relativeTo: obj)
+                    let size = (bounds.max - bounds.min) * 1.1
+                    let mesh = MeshResource.generateBox(size: size)
+                    
                     let material = UnlitMaterial(color: .white.withAlphaComponent(0.3))
                     let highlight = ModelEntity(mesh: mesh, materials: [material])
                     highlight.name = highlightName
+                    highlight.position = (bounds.max + bounds.min) / 2
                     highlight.components.set(OpacityComponent(opacity: 0.3))
                     obj.addChild(highlight)
                 }
@@ -608,10 +694,16 @@ class PhysicsSceneManager {
         
         for obj in targets {
             var bodyComponent = obj.components[PhysicsBodyComponent.self] ?? PhysicsBodyComponent()
-            bodyComponent.massProperties.mass = viewModel.mass
+            
+            // Update mass but keep existing calculated Center of Mass
+            var massProps = bodyComponent.massProperties
+            massProps.mass = viewModel.mass
+            bodyComponent.massProperties = massProps
+            
             bodyComponent.material = newMaterial
             bodyComponent.mode = viewModel.selectedMode.rkMode
             bodyComponent.linearDamping = viewModel.useAdvancedDrag ? 0.0 : viewModel.linearDamping
+            bodyComponent.angularDamping = 0.5
             
             obj.components.set(bodyComponent)
         }

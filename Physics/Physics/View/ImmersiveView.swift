@@ -29,11 +29,22 @@ struct ImmersiveView: View {
         .gesture(
             MagnifyGesture()
                 .targetedToAnyEntity()
+                .simultaneously(with: RotateGesture3D().targetedToAnyEntity())
                 .onChanged { value in
-                    sceneManager.handleMagnifyChanged(value: value)
+                    if let magnifyValue = value.first {
+                        sceneManager.handleMagnifyChanged(value: magnifyValue)
+                    }
+                    if let rotateValue = value.second {
+                        sceneManager.handleRotateChanged(value: rotateValue)
+                    }
                 }
-                .onEnded { _ in
-                    sceneManager.handleMagnifyEnded()
+                .onEnded { value in
+                    if let magnifyValue = value.first {
+                        sceneManager.handleMagnifyEnded(value: magnifyValue, viewModel: appViewModel)
+                    }
+                    if let rotateValue = value.second {
+                        sceneManager.handleRotateEnded(value: rotateValue, viewModel: appViewModel)
+                    }
                 }
         )
         .gesture(
