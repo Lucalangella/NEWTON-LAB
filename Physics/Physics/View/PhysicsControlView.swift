@@ -289,7 +289,6 @@ struct RampSettingsPanel: View {
             PhysicsSlider(label: "Angle", value: $vm.rampAngle, range: 0.0...60.0, unit: "°")
             PhysicsSlider(label: "Length", value: $vm.rampLength, range: 0.5...5.0, unit: "m")
             PhysicsSlider(label: "Width", value: $vm.rampWidth, range: 0.5...5.0, unit: "m")
-            PhysicsSlider(label: "Rotation", value: $vm.rampRotation, range: 0.0...360.0, unit: "°")
         }
     }
 }

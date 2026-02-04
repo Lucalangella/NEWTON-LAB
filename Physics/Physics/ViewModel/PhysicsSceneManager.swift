@@ -489,7 +489,7 @@ class PhysicsSceneManager {
     
     func handleMagnifyChanged(value: EntityTargetValue<MagnifyGesture.Value>) {
         guard let entity = findTargetEntity(for: value.entity) else { return }
-        if entity.name == "TraceRoot" || entity.name == "WallsRoot" { return }
+        if entity.name == "TraceRoot" || entity.name == "WallsRoot" || entity.name == "Ramp" { return }
         
         // Ensure kinematic during interaction
         if var body = entity.components[PhysicsBodyComponent.self], body.mode != .kinematic {
@@ -509,6 +509,7 @@ class PhysicsSceneManager {
     
     func handleMagnifyEnded(value: EntityTargetValue<MagnifyGesture.Value>, viewModel: AppViewModel) {
         guard let entity = findTargetEntity(for: value.entity) else { return }
+        if entity.name == "Ramp" { return }
         initialScale = nil
         endInteractionIfNeeded(entity: entity, viewModel: viewModel)
     }
@@ -533,9 +534,16 @@ class PhysicsSceneManager {
         // Convert Rotation3D to simd_quatf
         let rotation = value.rotation
         let rotationQuat = simd_quatf(rotation)
+        let combined = rotationQuat * startRotation
         
-        // Apply rotation relative to the start rotation
-        entity.orientation = rotationQuat * startRotation
+        if entity.name == "Ramp" {
+            // Constrain rotation to Y-axis (Up) only
+            let forward = combined.act([0, 0, 1])
+            let yaw = atan2(forward.x, forward.z)
+            entity.orientation = simd_quatf(angle: yaw, axis: [0, 1, 0])
+        } else {
+            entity.orientation = combined
+        }
     }
     
     func handleRotateEnded(value: EntityTargetValue<RotateGesture3D.Value>, viewModel: AppViewModel) {
