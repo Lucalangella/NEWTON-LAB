@@ -107,12 +107,6 @@ struct SceneEventsModifier: ViewModifier {
                     appViewModel.spawnCustomModelSignal = nil
                 }
             }
-            .onChange(of: appViewModel.showSun) {
-                sceneManager.updateSunVisibility(viewModel: appViewModel)
-            }
-            .onChange(of: appViewModel.sunIntensity) {
-                sceneManager.updateSunProperties(viewModel: appViewModel)
-            }
             .onChange(of: appViewModel.isSelectionMode) { _, newValue in
                 if !newValue {
                     appViewModel.clearSelection()

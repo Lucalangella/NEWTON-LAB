@@ -14,8 +14,6 @@ class AppViewModel {
     // --- System States ---
     var immersiveSpaceState: ImmersiveSpaceState = .closed
     var resetSignal = false
-    var showSun: Bool = false
-    var sunIntensity: Float = 800.0
     var environmentOpacity: Float = 0.5
     var spawnSignal: ShapeOption? = nil
     var spawnCustomModelSignal: URL? = nil

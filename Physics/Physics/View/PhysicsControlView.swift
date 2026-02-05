@@ -72,22 +72,6 @@ struct PhysicsControlView: View {
             VStack(alignment: .leading, spacing: 20) {
                 SectionHeader(title: "Environment", icon: "globe.europe.africa.fill")
                 
-                // Tools
-                HStack {
-                    // Selection Mode Toggle
-                    Toggle(isOn: $bVM.isSelectionMode) {
-                        Label("Select", systemImage: "cursorarrow")
-                    }
-                    .toggleStyle(.button)
-
-                    // Delete Mode Toggle
-                    Toggle(isOn: $bVM.isDeleteMode) {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .toggleStyle(.button)
-                }
-                .padding(.bottom, 5)
-
                 // Telemetry Readout Box
                 HStack {
                     VStack(alignment: .leading) {
@@ -113,20 +97,6 @@ struct PhysicsControlView: View {
                 .padding()
                 .background(.black.opacity(0.2))
                 .cornerRadius(12)
-                
-                // Sun Toggle
-                Toggle(isOn: $bVM.showSun) {
-                    Label("Sun Light", systemImage: "sun.max.fill")
-                }
-                .toggleStyle(.button)
-                
-                if vm.showSun {
-                    VStack(alignment: .leading, spacing: 10) {
-                        PhysicsSlider(label: "Sun Intensity", value: $bVM.sunIntensity, range: 0.0...3000.0, unit: "lx")
-                    }
-                    .padding(.vertical, 5)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
                 
                 // Environment Opacity
                 if vm.selectedEnvironment == .virtual {
@@ -271,6 +241,18 @@ struct DashboardToolbar: View {
             
             Toggle(isOn: $vm.showPath) {
                 Label("Trace", systemImage: "scribble")
+            }
+            .toggleStyle(.button)
+
+            Divider().frame(height: 20)
+
+            Toggle(isOn: $vm.isSelectionMode) {
+                Label("Select", systemImage: "cursorarrow")
+            }
+            .toggleStyle(.button)
+
+            Toggle(isOn: $vm.isDeleteMode) {
+                Label("Delete", systemImage: "trash")
             }
             .toggleStyle(.button)
         }

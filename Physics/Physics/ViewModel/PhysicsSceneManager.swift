@@ -12,8 +12,6 @@ class PhysicsSceneManager {
     var wallsRoot: Entity?
     var rampEntity: ModelEntity?
     var floorEntity: ModelEntity?
-    var sunEntity: ModelEntity?
-    var mainSunLight: DirectionalLight?
     
     // MARK: - ARKit
     var session = ARKitSession()
@@ -54,9 +52,7 @@ class PhysicsSceneManager {
         let keyLight = DirectionalLight()
         keyLight.light.intensity = 800
         keyLight.look(at: [0, 0, -2], from: [2, 4, 2], relativeTo: nil)
-        keyLight.isEnabled = viewModel.showSun
         rootEntity.addChild(keyLight)
-        self.mainSunLight = keyLight
         
         // 2. Fill Light (Softens Shadows)
         let fillLight = DirectionalLight()
@@ -65,9 +61,6 @@ class PhysicsSceneManager {
         rootEntity.addChild(fillLight)
         
         content.add(rootEntity)
-        
-        // Ensure Sun is initialized if needed
-        updateSunVisibility(viewModel: viewModel)
         
         // Traces
         let traces = Entity()
@@ -134,32 +127,12 @@ class PhysicsSceneManager {
         // Walk up the hierarchy to find the root interactable entity
         var current: Entity? = entity
         while let c = current {
-            if c.name == "PhysicsObject" || c.name == "Sun" || c.name == "Ramp" {
+            if c.name == "PhysicsObject" || c.name == "Ramp" {
                 return c
             }
             current = c.parent
         }
         return nil
-    }
-    
-    func updateSunVisibility(viewModel: AppViewModel) {
-        if viewModel.showSun {
-            if sunEntity == nil {
-                spawnSun(viewModel: viewModel)
-            }
-            sunEntity?.isEnabled = true
-            mainSunLight?.isEnabled = true
-            updateSunProperties(viewModel: viewModel)
-        } else {
-            sunEntity?.isEnabled = false
-            mainSunLight?.isEnabled = false
-        }
-    }
-    
-    func updateSunProperties(viewModel: AppViewModel) {
-        guard let light = mainSunLight else { return }
-        // Update Light Intensity
-        light.light.intensity = viewModel.sunIntensity
     }
     
     func updateEnvironmentOpacity(viewModel: AppViewModel) {
@@ -186,43 +159,8 @@ class PhysicsSceneManager {
         }
     }
 
-    private func spawnSun(viewModel: AppViewModel) {
-        // Remove existing if any (safety)
-        if let existing = sunEntity {
-            existing.removeFromParent()
-        }
-        
-        let sun: ModelEntity
-        if let loadedModel = try? ModelEntity.loadModel(named: "Sun") {
-            sun = loadedModel
-        } else {
-            // Fallback to sphere if USDZ fails
-            sun = ModelEntity(
-                mesh: .generateSphere(radius: 0.15),
-                materials: [UnlitMaterial(color: .yellow)]
-            )
-        }
-        
-        sun.name = "Sun"
-        sun.position = [0.5, 1.5, -1.0]
-        
-        // Physics for dragging
-        sun.components.set(PhysicsBodyComponent(mode: .kinematic))
-        sun.components.set(InputTargetComponent(allowedInputTypes: .all))
-        sun.generateCollisionShapes(recursive: true)
-        
-        rootEntity.addChild(sun)
-        self.sunEntity = sun
-    }
-
     // MARK: - Update Logic
     func handleSceneUpdate(viewModel: AppViewModel) {
-        // Update Sun Light Direction
-        if let sun = sunEntity, let light = mainSunLight {
-            // Light points from Sun to Origin (or Center of Scene roughly [0, 0, -2])
-            light.look(at: [0, 0, -2], from: sun.position, relativeTo: nil)
-        }
-        
         var totalSpeed: Float = 0
         var activeCount: Int = 0
         
@@ -558,20 +496,13 @@ class PhysicsSceneManager {
         // but since we only have one set of initialX variables, it works for single-object interaction.
         guard initialDragPosition == nil && initialScale == nil && initialRotation == nil else { return }
         
-        if entity.name == "Ramp" {
-            if var body = entity.components[PhysicsBodyComponent.self] {
-                body.mode = .static
-                entity.components.set(body)
-            }
-        } else if entity.name == "Sun" {
-            if var body = entity.components[PhysicsBodyComponent.self] {
-                body.mode = .kinematic
-                entity.components.set(body)
-                entity.components.set(PhysicsMotionComponent(linearVelocity: .zero, angularVelocity: .zero))
-            }
-        } else {
-            if var body = entity.components[PhysicsBodyComponent.self] {
-                body.mode = viewModel.selectedMode.rkMode
+                if entity.name == "Ramp" {
+                    if var body = entity.components[PhysicsBodyComponent.self] {
+                        body.mode = .static
+                        entity.components.set(body)
+                    }
+                } else {
+                    if var body = entity.components[PhysicsBodyComponent.self] {                body.mode = viewModel.selectedMode.rkMode
                 entity.components.set(body)
             }
             if viewModel.selectedMode == .dynamic {
@@ -675,8 +606,6 @@ class PhysicsSceneManager {
             obj.removeFromParent()
         }
         spawnedObjects.removeAll()
-        sunEntity?.removeFromParent()
-        sunEntity = nil
         traceRoot?.children.removeAll()
         lastMarkerPosition = nil
     }
