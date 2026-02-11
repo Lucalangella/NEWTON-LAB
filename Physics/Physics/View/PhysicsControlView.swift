@@ -33,19 +33,20 @@ struct PhysicsControlView: View {
                         .tint(shapeSecondaryColor(for: shape))
                     }
                     
+         
                     // Import Custom Model Button
-                    Button(action: { vm.showFileImporter = true }) {
-                        VStack {
-                            Image(systemName: "square.and.arrow.down.fill")
-                                .font(.title2)
-                            Text("Import")
-                                .font(.caption2)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.purple)
+                                        Button(action: { vm.showFileImporter = true }) {
+                                            VStack {
+                                                Image(systemName: "square.and.arrow.down.fill")
+                                                    .font(.title2)
+                                                Text("Import")
+                                                    .font(.caption2)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 10)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .tint(.purple)
                 }
                 
                 Divider()
@@ -143,20 +144,45 @@ struct PhysicsControlView: View {
         .ornament(attachmentAnchor: .scene(.bottom)) {
             DashboardToolbar(vm: vm)
         }
-        .fileImporter(
-            isPresented: $bVM.showFileImporter,
-            allowedContentTypes: [UTType(filenameExtension: "usdz")!],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                if let url = urls.first {
-                    vm.spawnCustomModelSignal = url
+        // --- File Importer ---
+                .fileImporter(
+                    isPresented: $bVM.showFileImporter,
+                    allowedContentTypes: [UTType(filenameExtension: "usdz")!],
+                    allowsMultipleSelection: false
+                ) { result in
+                    switch result {
+                    case .success(let urls):
+                        if let url = urls.first {
+                            // Store the URL and show the choice dialog
+                            vm.pendingImportURL = url
+                            vm.showCollisionChoiceDialog = true
+                        }
+                    case .failure(let error):
+                        print("Error picking file: \(error.localizedDescription)")
+                    }
                 }
-            case .failure(let error):
-                print("Error picking file: \(error.localizedDescription)")
-            }
-        }
+                // --- Collision Choice Dialog ---
+                .confirmationDialog(
+                    "Select Collision Shape",
+                    isPresented: $bVM.showCollisionChoiceDialog,
+                    titleVisibility: .visible
+                ) {
+                    ForEach(ImportCollisionShape.allCases) { shape in
+                        Button(shape.rawValue) {
+                            // Set the chosen shape, then trigger the spawn!
+                            vm.importCollisionShape = shape
+                            if let url = vm.pendingImportURL {
+                                vm.spawnCustomModelSignal = url
+                                vm.pendingImportURL = nil // Clear the temporary URL
+                            }
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {
+                        vm.pendingImportURL = nil
+                    }
+                } message: {
+                    Text("How should the physics engine calculate this object's collision?")
+                }
     }
 }
 

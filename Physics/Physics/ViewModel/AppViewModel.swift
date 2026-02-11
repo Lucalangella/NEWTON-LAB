@@ -9,8 +9,23 @@ import SwiftUI
 import Observation
 import RealityKit
 
+// 1. Keep only the 3 options
+enum ImportCollisionShape: String, CaseIterable, Identifiable {
+    case automatic = "Mesh"
+    case sphere = "Sphere"
+    case box = "Box"
+    
+    var id: String { self.rawValue }
+}
+
 @Observable
 class AppViewModel {
+    var importCollisionShape: ImportCollisionShape = .sphere
+    
+    // 2. Add these two new variables for the dialog workflow
+    var pendingImportURL: URL? = nil
+    var showCollisionChoiceDialog: Bool = false
+
     // --- System States ---
     var immersiveSpaceState: ImmersiveSpaceState = .closed
     var resetSignal = false

@@ -300,7 +300,7 @@ class PhysicsSceneManager {
             mode: initialMode
         )
         physicsBody.linearDamping = viewModel.linearDamping
-        physicsBody.angularDamping = 0.5 // Add damping to reduce wobbling
+        physicsBody.angularDamping = 0.0 // Add damping to reduce wobbling
         object.components.set(physicsBody)
         
         rootEntity.addChild(object)
@@ -321,11 +321,30 @@ class PhysicsSceneManager {
                 Float.random(in: -0.2...0.2)
             )
             object.position = [0, 1.5, -2.0] + randomOffset
-            
             object.components.set(InputTargetComponent(allowedInputTypes: .all))
             
-            // Generate collisions for custom model
-            object.generateCollisionShapes(recursive: true)
+            // --- Calculate bounds for accurate sizing & centering ---
+            let bounds = object.visualBounds(relativeTo: object)
+            let geometricCenter = (bounds.max + bounds.min) / 2
+            let extents = bounds.max - bounds.min
+            
+            // --- Apply the selected Collision Shape ---
+            switch viewModel.importCollisionShape {
+            case .sphere:
+                // Creates a perfect rolling sphere
+                let radius = max(extents.x, extents.y, extents.z) / 2.0
+                let sphereShape = ShapeResource.generateSphere(radius: radius).offsetBy(translation: geometricCenter)
+                object.collision = CollisionComponent(shapes: [sphereShape])
+                
+            case .box:
+                // Creates a perfect sliding box
+                let boxShape = ShapeResource.generateBox(size: extents).offsetBy(translation: geometricCenter)
+                object.collision = CollisionComponent(shapes: [boxShape])
+                
+            case .automatic:
+                // Wraps the object in a low-poly mesh (Good for complex shapes, bad for rolling)
+                object.generateCollisionShapes(recursive: true)
+            }
             
             let physMaterial = PhysicsMaterialResource.generate(
                 staticFriction: viewModel.staticFriction,
@@ -333,18 +352,14 @@ class PhysicsSceneManager {
                 restitution: viewModel.restitution
             )
             
-            // Try to create mass properties from the generated collision shapes
+            // --- Setup Mass ---
             var massProps: PhysicsMassProperties
-            let bounds = object.visualBounds(relativeTo: object)
-            let geometricCenter = (bounds.max + bounds.min) / 2
-            
             if let shape = object.collision?.shapes.first {
                 massProps = PhysicsMassProperties(shape: shape, mass: viewModel.mass)
             } else {
                 massProps = .init(mass: viewModel.mass)
             }
-            
-            // Force Center of Mass to geometric center
+            // Force Center of Mass to geometric center to stop wobbling
             massProps.centerOfMass.position = geometricCenter
             
             let initialMode: PhysicsBodyMode = (viewModel.selectedEnvironment == .mixed) ? .kinematic : viewModel.selectedMode.rkMode
@@ -353,8 +368,12 @@ class PhysicsSceneManager {
                 material: physMaterial,
                 mode: initialMode
             )
+            
             physicsBody.linearDamping = viewModel.linearDamping
-            physicsBody.angularDamping = 0.5
+            
+            // IMPORTANT: Keep angular damping at 0.0 so spheres can actually roll!
+            physicsBody.angularDamping = 0.0
+            
             object.components.set(physicsBody)
             
             rootEntity.addChild(object)
@@ -640,7 +659,7 @@ class PhysicsSceneManager {
             bodyComponent.material = newMaterial
             bodyComponent.mode = viewModel.selectedMode.rkMode
             bodyComponent.linearDamping = viewModel.useAdvancedDrag ? 0.0 : viewModel.linearDamping
-            bodyComponent.angularDamping = 0.5
+            bodyComponent.angularDamping = 0.0
             
             obj.components.set(bodyComponent)
         }
@@ -816,4 +835,6 @@ class PhysicsSceneManager {
         }
         return nil
     }
+    
+    
 }
