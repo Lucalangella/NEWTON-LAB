@@ -272,11 +272,6 @@ struct DashboardToolbar: View {
 
             Divider().frame(height: 20)
 
-            Toggle(isOn: $vm.isSelectionMode) {
-                Label("Select", systemImage: "cursorarrow")
-            }
-            .toggleStyle(.button)
-
             Toggle(isOn: $vm.isDeleteMode) {
                 Label("Delete", systemImage: "trash")
             }

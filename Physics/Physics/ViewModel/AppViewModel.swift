@@ -34,26 +34,8 @@ class AppViewModel {
     var spawnCustomModelSignal: URL? = nil
     var showFileImporter: Bool = false
     
-    // --- Selection Mode ---
-    var isSelectionMode: Bool = false {
-        didSet { if isSelectionMode { isDeleteMode = false } }
-    }
-    var isDeleteMode: Bool = false {
-        didSet { if isDeleteMode { isSelectionMode = false } }
-    }
-    var selectedEntityIDs: Set<UInt64> = []
-    
-    func toggleSelection(_ id: UInt64) {
-        if selectedEntityIDs.contains(id) {
-            selectedEntityIDs.remove(id)
-        } else {
-            selectedEntityIDs.insert(id)
-        }
-    }
-    
-    func clearSelection() {
-        selectedEntityIDs.removeAll()
-    }
+    // --- Delete Mode ---
+    var isDeleteMode: Bool = false
     
     // --- Environment ---
     var selectedEnvironment: PhysicsEnvironmentMode = .virtual

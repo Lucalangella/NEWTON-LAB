@@ -107,12 +107,6 @@ struct SceneEventsModifier: ViewModifier {
                     appViewModel.spawnCustomModelSignal = nil
                 }
             }
-            .onChange(of: appViewModel.isSelectionMode) { _, newValue in
-                if !newValue {
-                    appViewModel.clearSelection()
-                    Task { sceneManager.updateSelectionVisuals(viewModel: appViewModel) }
-                }
-            }
     }
 }
 

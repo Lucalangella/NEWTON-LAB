@@ -540,7 +540,7 @@ class PhysicsSceneManager {
         }
     }
     
-    // MARK: - Selection
+    // MARK: - Interaction
     func handleTap(value: EntityTargetValue<SpatialTapGesture.Value>, viewModel: AppViewModel) {
         guard let objectEntity = findTargetEntity(for: value.entity) as? ModelEntity else { return }
         
@@ -552,70 +552,6 @@ class PhysicsSceneManager {
             // Delete Logic
             object.removeFromParent()
             spawnedObjects.remove(at: objectIndex)
-            
-            // Also cleanup selection if it was selected
-            if viewModel.selectedEntityIDs.contains(object.id) {
-                viewModel.selectedEntityIDs.remove(object.id)
-                // No need to update visuals for this object as it's gone, 
-                // but might need to sync VM if it was the only selection.
-            }
-            return
-        }
-        
-        guard viewModel.isSelectionMode else { return }
-        
-        viewModel.toggleSelection(object.id)
-        updateSelectionVisuals(viewModel: viewModel)
-        syncViewModelToSelection(viewModel: viewModel)
-    }
-    
-    func updateSelectionVisuals(viewModel: AppViewModel) {
-        for obj in spawnedObjects {
-            // Check for existing highlight
-            let highlightName = "SelectionHighlight"
-            let existingHighlight = obj.findEntity(named: highlightName)
-            
-            if viewModel.selectedEntityIDs.contains(obj.id) {
-                // Add highlight if missing
-                if existingHighlight == nil {
-                    let bounds = obj.visualBounds(relativeTo: obj)
-                    let size = (bounds.max - bounds.min) * 1.1
-                    let mesh = MeshResource.generateBox(size: size)
-                    
-                    let material = UnlitMaterial(color: .white.withAlphaComponent(0.3))
-                    let highlight = ModelEntity(mesh: mesh, materials: [material])
-                    highlight.name = highlightName
-                    highlight.position = (bounds.max + bounds.min) / 2
-                    highlight.components.set(OpacityComponent(opacity: 0.3))
-                    obj.addChild(highlight)
-                }
-            } else {
-                // Remove highlight if present
-                if let highlight = existingHighlight {
-                    highlight.removeFromParent()
-                }
-            }
-        }
-    }
-    
-    func syncViewModelToSelection(viewModel: AppViewModel) {
-        // If one object selected, update VM values to match it.
-        // If multiple, maybe don't sync (keep current VM values).
-        // If none, keep current.
-        
-        guard viewModel.selectedEntityIDs.count == 1,
-              let id = viewModel.selectedEntityIDs.first,
-              let obj = spawnedObjects.first(where: { $0.id == id }) else { return }
-        
-        if let body = obj.components[PhysicsBodyComponent.self] {
-            viewModel.mass = body.massProperties.mass
-            // Material properties are harder to extract perfectly back to VM's separated friction/restitution
-            // without storing them. But we can try to get them if available.
-            // RK's PhysicsMaterialResource doesn't expose properties easily.
-            // Strategy: We rely on the VM being the source of truth for the *next* edit.
-            // So we might NOT sync back perfectly for now to avoid complexity, 
-            // OR we assume standard values.
-            // Ideally, we should store a metadata component on the entity with these values.
         }
     }
     
@@ -641,12 +577,7 @@ class PhysicsSceneManager {
             restitution: viewModel.restitution
         )
         
-        let targets: [ModelEntity]
-        if viewModel.selectedEntityIDs.isEmpty {
-            targets = spawnedObjects
-        } else {
-            targets = spawnedObjects.filter { viewModel.selectedEntityIDs.contains($0.id) }
-        }
+        let targets = spawnedObjects
         
         for obj in targets {
             var bodyComponent = obj.components[PhysicsBodyComponent.self] ?? PhysicsBodyComponent()

@@ -15,7 +15,7 @@ The primary goal of this tool is to help you feel the physics (mass, friction, r
     * **Primitives:** Box, Sphere, Cylinder, and **Cone**.
     * **Import Custom Models:** Import your own **.usdz** files to test physics on custom assets.
 * **Tools:**
-    * **Selection & Deletion:** Select specific objects to view/tweak their properties or delete unwanted entities from the scene.
+    * **Deletion:** Delete unwanted entities from the scene.
     * **Velocity Monitoring:** Real-time speed feedback.
 
 ## 🌟 Core Features
@@ -81,7 +81,7 @@ This app is designed to be a utility for your workflow.
 * **`PhysicsSceneManager.swift`**: The core logic engine. It handles RealityKit entities, physics updates, advanced drag calculations, ARKit scene reconstruction, and hand tracking.
 * **`ImmersiveView.swift`**: The main SwiftUI view for the immersive space. It bridges SwiftUI state (sliders/buttons) to the `PhysicsSceneManager`.
 * **`PhysicsControlView.swift`**: The dashboard UI containing sliders for Mass, Gravity, Friction, and Aerodynamics, as well as file importing and environment toggles.
-* **`AppViewModel.swift`**: Holds the state of the simulation (current physics values, selected modes, UI toggles, selection state).
+* **`AppViewModel.swift`**: Holds the state of the simulation (current physics values, selected modes, UI toggles).
 
 ## ⚙️ Requirements
 
