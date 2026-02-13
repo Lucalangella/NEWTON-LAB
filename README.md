@@ -14,7 +14,7 @@ Keep up with the development journey, technical deep-dives, and latest updates:
 
 **Medium Articles:**
 * **[Part 1: Stop Guessing! A Real-Time Physics Lab for RealityKit Developers](https://medium.com/@langellaluca00/stop-guessing-a-real-time-physics-lab-for-realitykit-developers-bf5e4d1b59c5)** – The origin story and core concepts.
-* **[Part 2: NewtonLab Update: Testing Custom USDZ Physics](https://medium.com/@langellaluca00/newtonlab-update-testing-custom-usdz-physics-in-realitykit-4eb90873bd5d?postPublishedType=initial)** – *New!* Covering custom model imports, advanced aerodynamics, and wall configurations.
+* **[Part 2: NewtonLab Update: Testing Custom USDZ Physics](https://medium.com/@langellaluca00/newtonlab-update-testing-custom-usdz-physics-in-realitykit-4eb90873bd5d?postPublishedType=initial)** – *New!* Covering custom model imports.
 
 **LinkedIn posts with the HQ videos:**
 * [Original Launch Post](https://www.linkedin.com/posts/luca-langella-4a1b54250_visionos-apple-developertools-activity-7422272297425657857-YWKJ?utm_source=share&utm_medium=member_desktop&rcm=ACoAAD4bNrkB0-_SSrsmuGjEaBiJNKwcdeWGXUU)
