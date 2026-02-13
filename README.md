@@ -1,13 +1,26 @@
 # NewtonLab
+
 ![NEWTONLAB-ezgif com-optimize](https://github.com/user-attachments/assets/f9573e8f-355b-4ed7-a193-b66abe096243)
 
 NewtonLab is a **VisionOS** application built with **SwiftUI** and **RealityKit**. It serves as an interactive physics laboratory where developers can experiment with various physical properties, simulate real-world behaviors in an immersive environment, and determine the optimal values for their own applications.
 
-The primary goal of this tool is to help you feel the physics (mass, friction, restitution, air density) and visualize the results, so you can take those precise values and use them in your own RealityKit projects.
+The primary goal of this tool is to help you *feel* the physics (mass, friction, restitution, air density) and visualize the results, so you can take those precise values and use them in your own RealityKit projects.
 
-> **📢 Coming Soon:** A new article and video tutorial covering the latest implementations (Custom Models, Advanced Aerodynamics, and Wall Configuration) will be released shortly. Stay tuned!
+---
 
-[![Read on Medium](https://img.shields.io/badge/Medium-Story-black?logo=medium)](https://medium.com/@langellaluca00/stop-guessing-a-real-time-physics-lab-for-realitykit-developers-bf5e4d1b59c5)
+### 📖 Read the Story & Updates
+
+Keep up with the development journey, technical deep-dives, and latest updates:
+
+**Medium Articles:**
+* **[Part 1: Stop Guessing! A Real-Time Physics Lab for RealityKit Developers](https://medium.com/@langellaluca00/stop-guessing-a-real-time-physics-lab-for-realitykit-developers-bf5e4d1b59c5)** – The origin story and core concepts.
+* **[Part 2: NewtonLab Update: Testing Custom USDZ Physics](https://medium.com/@langellaluca00/newtonlab-update-testing-custom-usdz-physics-in-realitykit-4eb90873bd5d?postPublishedType=initial)** – *New!* Covering custom model imports, advanced aerodynamics, and wall configurations.
+
+**LinkedIn posts with the HQ videos:**
+* [Original Launch Post](https://www.linkedin.com/posts/luca-langella-4a1b54250_visionos-apple-developertools-activity-7422272297425657857-YWKJ?utm_source=share&utm_medium=member_desktop&rcm=ACoAAD4bNrkB0-_SSrsmuGjEaBiJNKwcdeWGXUU)
+* [Latest Update Demo](https://www.linkedin.com/posts/luca-langella-4a1b54250_applevisionpro-realitykit-swift-activity-7428074556474585089-W9U9?utm_source=share&utm_medium=member_desktop&rcm=ACoAAD4bNrkB0-_SSrsmuGjEaBiJNKwcdeWGXUU)
+
+---
 
 ## 🚀 New Features
 
