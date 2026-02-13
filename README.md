@@ -1,6 +1,6 @@
 # NewtonLab
-
-![NEWTONLAB-ezgif com-optimize](https://github.com/user-attachments/assets/f9573e8f-355b-4ed7-a193-b66abe096243)
+![First GIF](https://github.com/user-attachments/assets/f9573e8f-355b-4ed7-a193-b66abe096243)
+![Second GIF](https://github.com/user-attachments/assets/7069601b-e68b-45db-a659-1d53c7991acb)
 
 NewtonLab is a **VisionOS** application built with **SwiftUI** and **RealityKit**. It serves as an interactive physics laboratory where developers can experiment with various physical properties, simulate real-world behaviors in an immersive environment, and determine the optimal values for their own applications.
 
